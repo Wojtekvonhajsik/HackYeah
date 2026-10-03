@@ -26,8 +26,9 @@ def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
 class RateLimiter:
     """Prosty limit w oknie czasowym, w pamięci (jedna instancja serwera)."""
 
-    def __init__(self, max_requests: int, window_s: float) -> None:
+    def __init__(self, max_requests: int, window_s: float, what: str = "głosów") -> None:
         self.max_requests = max_requests
+        self.what = what
         self.window_s = window_s
         self._hits: dict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
@@ -42,7 +43,7 @@ class RateLimiter:
                 retry = int(self.window_s - (now - hits[0])) + 1
                 raise HTTPException(
                     status_code=429,
-                    detail=f"Za dużo głosów z tego adresu - spróbuj za {retry} s",
+                    detail=f"Za dużo {self.what} z tego adresu - spróbuj za {retry} s",
                     headers={"Retry-After": str(retry)},
                 )
             hits.append(now)
@@ -62,3 +63,16 @@ def vote_limiter() -> RateLimiter:
 def limit_votes(request: Request) -> None:
     # Za reverse proxy adres klienta to adres proxy - wtedy uruchom uvicorn z --proxy-headers
     vote_limiter().check(request.client.host if request.client else "unknown")
+
+
+_assistant_limiter: RateLimiter | None = None
+
+
+def limit_assistant(request: Request) -> None:
+    """Każde pytanie to płatne wywołanie modelu - osobny limit (domyślnie 60/h z jednego adresu)."""
+    global _assistant_limiter
+    if _assistant_limiter is None:
+        _assistant_limiter = RateLimiter(
+            int(os.environ.get("ASSISTANT_RATE_LIMIT_PER_HOUR", "60")), window_s=3600, what="pytań do asystenta"
+        )
+    _assistant_limiter.check(request.client.host if request.client else "unknown")

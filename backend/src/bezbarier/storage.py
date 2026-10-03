@@ -57,6 +57,22 @@ class OwnerCode(BaseModel):
     created_at: date
 
 
+class Sponsorship(BaseModel):
+    """Kampania reklamowa miejsca w asystencie. Reklama nigdy nie zmienia oceny dostępności."""
+
+    id: str
+    place_id: str
+    sponsor_name: str
+    tagline: str          # krótki tekst reklamy (do 120 znaków)
+    starts: date
+    ends: date
+    impressions: int = 0  # ile razy pokazana w odpowiedzi asystenta
+    clicks: int = 0       # ile razy ktoś otworzył kartę miejsca z reklamy
+
+    def active_on(self, day: date) -> bool:
+        return self.starts <= day <= self.ends
+
+
 def _hash_code(code: str) -> str:
     return hashlib.sha256(code.strip().upper().encode()).hexdigest()
 
@@ -68,6 +84,7 @@ class InMemoryRepository:
         self._votes: dict[str, dict[str, Vote]] = {}  # observation_id -> voter_id -> głos
         self.analyzed_images: set[str] = set()  # "<provider>-<id>" - nie analizujemy zdjęcia dwa razy
         self._owner_codes: dict[str, OwnerCode] = {}  # hash kodu -> kod
+        self.sponsorships: dict[str, Sponsorship] = {}
 
     def add_place(self, place: Place) -> None:
         existing = self.places.get(place.id)
@@ -165,6 +182,29 @@ class InMemoryRepository:
     def _save_owner_code(self, entry: OwnerCode) -> None:
         """W pamięci nic więcej do zrobienia; SqliteRepository zapisuje do bazy."""
 
+    def has_owner_data(self, place_id: str) -> bool:
+        """Czy właściciel potwierdził dane miejsca kodem - warunek wykupienia reklamy."""
+        return any(o.place_id == place_id and o.source.type == SourceType.OWNER for o in self._observations.values())
+
+    def add_sponsorship(self, sponsorship: Sponsorship) -> None:
+        self.sponsorships[sponsorship.id] = sponsorship
+        self._save_sponsorship(sponsorship)
+
+    def active_sponsorship(self, place_id: str, day: date) -> Sponsorship | None:
+        return next((s for s in self.sponsorships.values() if s.place_id == place_id and s.active_on(day)), None)
+
+    def count_sponsor_event(self, sponsorship_id: str, field: str) -> Sponsorship | None:
+        sponsorship = self.sponsorships.get(sponsorship_id)
+        if sponsorship is None:
+            return None
+        updated = sponsorship.model_copy(update={field: getattr(sponsorship, field) + 1})
+        self.sponsorships[sponsorship_id] = updated
+        self._save_sponsorship(updated)
+        return updated
+
+    def _save_sponsorship(self, sponsorship: Sponsorship) -> None:
+        """W pamięci nic więcej do zrobienia; SqliteRepository zapisuje do bazy."""
+
     def _with_votes(self, obs: Observation) -> Observation:
         votes = self._votes.get(obs.id)
         if not votes:
@@ -204,6 +244,7 @@ CREATE TABLE IF NOT EXISTS votes (
 );
 CREATE TABLE IF NOT EXISTS analyzed_images (key TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS owner_codes (code_hash TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sponsorships (id TEXT PRIMARY KEY, data TEXT NOT NULL);
 """
 
 
@@ -243,6 +284,9 @@ class SqliteRepository(InMemoryRepository):
         for (data,) in self._db.execute("SELECT data FROM owner_codes"):
             entry = OwnerCode.model_validate_json(data)
             self._owner_codes[entry.code_hash] = entry
+        for (data,) in self._db.execute("SELECT data FROM sponsorships"):
+            sponsorship = Sponsorship.model_validate_json(data)
+            self.sponsorships[sponsorship.id] = sponsorship
 
     def _write(self, sql: str, rows: list[tuple[str, ...]]) -> None:
         with self._lock, self._db:  # "with self._db" = transakcja z automatycznym commit
@@ -272,6 +316,9 @@ class SqliteRepository(InMemoryRepository):
             [(vote.observation_id, vote.voter_id, vote.model_dump_json())],
         )
         return result
+
+    def _save_sponsorship(self, sponsorship: Sponsorship) -> None:
+        self._write("INSERT OR REPLACE INTO sponsorships VALUES (?, ?)", [(sponsorship.id, sponsorship.model_dump_json())])
 
     def _save_owner_code(self, entry: OwnerCode) -> None:
         self._write("INSERT OR REPLACE INTO owner_codes VALUES (?, ?)", [(entry.code_hash, entry.model_dump_json())])

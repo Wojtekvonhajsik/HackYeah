@@ -48,6 +48,18 @@ docker run -d -p 8000:8000 --env-file .env -v bezbarier-data:/app/storage krakow
 
 Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - to samo zdjęcie nigdy nie jest analizowane drugi raz.
 
+## Model biznesowy w aplikacji: asystent + miejsca sponsorowane
+
+- **Asystent** (`POST /assistant`): mały model językowy (Gemini Flash-Lite) odpowiada na pytania typu „gdzie zjem
+  bez schodów?” wyłącznie na podstawie ocen miejsc dla profilu użytkownika. Bez klucza API - odpowiedź z reguł.
+- **Miejsca sponsorowane**: obiekt wykupuje kampanię (`scripts/sponsor.py`, `POST /admin/sponsorships`) i pojawia się
+  w osobnym, oznaczonym polu pod odpowiedzią asystenta. Zasady, które chronią wiarygodność:
+  1. warunek zakupu: dane o dostępności potwierdzone przez właściciela (kod właściciela) - reklama poprawia dane,
+  2. reklama tylko dla osób, dla których miejsce nie ma znanych przeszkód (wózek nie zobaczy lokalu ze schodami),
+  3. model AI nie wie o reklamach, a reklama nie zmienia ocen ani kolejności poleceń,
+  4. najwyżej jedna reklama na odpowiedź; reklamodawca dostaje raport wyświetleń i kliknięć (`--report`).
+- Koszt: każde pytanie to jedno wywołanie małego modelu (ułamek centa); limit 60 pytań/h na adres chroni przed nadużyciem.
+
 ## Odpowiedzialność
 
 | Obszar | Co obejmuje |

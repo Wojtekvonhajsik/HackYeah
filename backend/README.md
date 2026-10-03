@@ -89,6 +89,8 @@ Właściciel (hotel, muzeum…) dostaje kod i link do formularza; jego dane maj�
 | `POST /places/{id}/reports` | użytkownik uzupełnia brakującą informację (np. szerokość drzwi) |
 | `POST /places/{id}/owner-reports` | dane od właściciela obiektu (nagłówek `X-Owner-Code`) |
 | `POST /admin/owner-codes` | wydanie kodu właściciela (z `ADMIN_TOKEN` wymaga `X-Admin-Token`) |
+| `POST /assistant` | asystent AI: odpowiedź na pytanie na podstawie ocen miejsc + osobne, oznaczone miejsce sponsorowane |
+| `POST /admin/sponsorships`, `GET /admin/sponsorships` | kampanie reklamowe i ich statystyki (tylko miejsca z danymi od właściciela) |
 | `POST /classify` | czysta klasyfikacja przesłanych obserwacji |
 | `POST /observations/analyze` | detekcja cech na zdjęciu |
 
@@ -112,6 +114,16 @@ Testy zawsze używają detektora `mock`, niezależnie od `.env`.
 
 Głosy, poprawki, dane pobrane z OSM i wyniki skanów zapisują się w `backend/data/bezbarier.db` (SQLite, plik w `.gitignore`)
 i przetrwają restart serwera. Żeby zacząć od zera, zatrzymaj serwer i usuń ten plik.
+
+## Asystent i reklamy
+
+Asystent używa Gemini, gdy w `.env` jest `GEMINI_API_KEY` (model: `GEMINI_MODEL`); bez klucza odpowiada regułami.
+Kampania reklamowa (przy zatrzymanym serwerze; miejsce musi mieć dane od właściciela):
+
+```bash
+.venv\Scripts\python scripts\sponsor.py "Camelot Cafe" "Camelot Cafe" "Wejście bez progu, stoliki dla wózków" --days 30
+.venv\Scripts\python scripts\sponsor.py --report
+```
 
 ## Przygotowanie demo
 

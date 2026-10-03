@@ -34,6 +34,7 @@ def sync_osm_loading(monkeypatch):
     from bezbarier.api import main
 
     monkeypatch.setattr(main, "osm_executor", SyncExecutor())
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)  # asystent w testach na regułach, bez płatnego modelu
     monkeypatch.setattr(main, "_osm_jobs", {})
     monkeypatch.setattr(main, "_osm_failed_at", {})
 

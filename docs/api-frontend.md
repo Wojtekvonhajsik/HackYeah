@@ -170,6 +170,24 @@ document.querySelector("#text-version").textContent = assessment.text;  // alter
 
 Treść błędu jest zawsze w `detail` (po polsku).
 
+### 7. Asystent - `POST /assistant`
+
+Body: `{"question": "Gdzie zjem bez schodów?", "preset": "step_free_strict"}` (profil jak przy ocenie). Odpowiedź:
+
+| Pole | Opis |
+|---|---|
+| `answer` | krótka odpowiedź po polsku - przeczytaj na głos przy włączonym czytaniu |
+| `places[]` | polecone miejsca (`place_id`, `name`, `summary`, `summary_text`, `summary_confidence_pct`) - link do karty miejsca |
+| `sponsored` | `null` albo **jedno** miejsce sponsorowane (`sponsor_name`, `tagline`, `sponsorship_id`) - pokaż osobno, z etykietą „Sponsorowane” |
+| `engine` | model AI (np. `gemini-3.5-flash-lite`) albo `reguły` (bez klucza / gdy model nie odpowie) |
+| `disclosure` | tekst o źródłach i reklamach - pokaż pod odpowiedzią |
+
+Po kliknięciu w miejsce sponsorowane wyślij `POST /sponsorships/{sponsorship_id}/click` (statystyka dla reklamodawcy,
+bez danych o użytkowniku). Limit: 60 pytań na godzinę z jednego adresu (`429`).
+
+Zasady reklam (egzekwowane w backendzie): model AI nie widzi reklam; reklama tylko dla miejsc z danymi potwierdzonymi
+przez właściciela i tylko osobom, dla których miejsce nie ma znanych przeszkód; nie zmienia kolejności poleceń ani ocen.
+
 ## Tylko dla administratora
 
 `POST /places/{id}/scan` i `POST /observations/analyze` analizują zdjęcia płatnym modelem AI i wymagają
