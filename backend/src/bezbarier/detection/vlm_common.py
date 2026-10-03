@@ -12,7 +12,30 @@ from pydantic import BaseModel
 from ..classification.models import FeatureType
 from .base import Detection, ImageRef
 
-SYSTEM_PROMPT = """\
+SurfaceValue = Literal[
+    "asphalt", "concrete", "paving_stones", "sett", "cobblestone", "unhewn_cobblestone",
+    "gravel", "fine_gravel", "compacted", "grass", "sand", "dirt", "wood",
+]
+
+# Wartości OSM (https://wiki.openstreetmap.org/wiki/Key:surface) z opisem wyglądu - bez opisu model je myli
+SURFACE_GLOSSARY: dict[str, str] = {
+    "asphalt": "asfalt - gładka, ciemna, jednolita powierzchnia bez fug",
+    "concrete": "beton - gładka szara wylewka lub duże płyty z rzadkimi szczelinami",
+    "paving_stones": "płyty chodnikowe lub betonowa kostka (np. polbruk) - regularne, płaskie elementy z wąskimi "
+    "fugami; także gładkie, cięte płyty kamienne",
+    "sett": "kostka kamienna (np. granitowa) - małe ciosane kamienne kostki ok. 10x10 cm, lekko nierówne, wyraźne fugi",
+    "cobblestone": "bruk - tylko gdy nie da się rozróżnić sett od unhewn_cobblestone",
+    "unhewn_cobblestone": "kocie łby - zaokrąglone, nieobrobione kamienie, bardzo nierówna powierzchnia",
+    "gravel": "żwir - luźne kamyki",
+    "fine_gravel": "drobny żwir / grys - ubita, drobnoziarnista nawierzchnia parkowa",
+    "compacted": "utwardzona ziemia lub tłuczeń - twarda, matowa, bez wyraźnych kamyków",
+    "grass": "trawa",
+    "sand": "piasek",
+    "dirt": "ubita ziemia, ścieżka gruntowa",
+    "wood": "drewno - deski, pomost",
+}
+
+_PROMPT_TEMPLATE = """\
 Analizujesz zdjęcia ulic (perspektywa pieszego) pod kątem dostępności dla osób z różnymi potrzebami
 (wózki inwalidzkie, wózki dziecięce, osoby niewidome, osoby starsze).
 
@@ -21,14 +44,19 @@ Wypisz KAŻDĄ widoczną cechę z poniższej listy typów:
 - steps: schody (step_count_min/max, height_cm_min/max = wysokość stopnia, handrail, contrast_marking, ramp_present)
 - ramp: podjazd (incline_pct_min/max, width_cm_min/max)
 - entrance: wejście do budynku (width_cm_min/max = szerokość drzwi, height_cm_min/max = wysokość progu)
-- surface: nawierzchnia chodnika (surface: wartość OSM: asphalt, concrete, paving_stones, sett, cobblestone,
-  unhewn_cobblestone, gravel, fine_gravel, compacted, grass, sand, dirt, wood)
+- surface: nawierzchnia, po której się idzie (surface: jedna wartość ze słowniczka poniżej)
 - path_width: szerokość chodnika (width_cm_min/max)
 - incline: wyraźne nachylenie chodnika (incline_pct_min/max)
 - obstacle: przeszkoda (obstacle_kind, blocks_path, width_cm_min/max = wolne miejsce obok przeszkody,
   bottom_height_cm_min/max = wysokość dolnej krawędzi, jeśli przeszkoda wisi nad chodnikiem, temporary)
 - crossing: przejście dla pieszych (kerb_kind i height_cm_* dla krawężnika, tactile_paving, traffic_signals, sound_signals)
 - amenity: udogodnienie (amenity_kind: bench, toilets_wheelchair, elevator)
+
+Słowniczek nawierzchni - wybieraj na podstawie WYGLĄDU z opisu, nie potocznej nazwy:
+{surface_glossary}
+"Kostka brukowa" bywa betonowa (paving_stones) albo kamienna (sett): małe ciosane kostki z kamienia naturalnego
+-> sett; regularne betonowe kostki lub gładkie płyty -> paving_stones. Przy mieszance wybierz nawierzchnię głównego
+ciągu pieszego, a mieszankę opisz w description.
 
 Zasady:
 - Wymiary szacuj jako zakres min-max, korzystając z obiektów referencyjnych: standardowy krawężnik ~12-15 cm,
@@ -39,6 +67,10 @@ Zasady:
 - Pola nieużywane przez dany typ ustaw na null.
 - Jeśli na zdjęciu nie ma żadnych z tych cech, zwróć pustą listę.
 """
+
+SYSTEM_PROMPT = _PROMPT_TEMPLATE.format(
+    surface_glossary="\n".join(f"  - {key}: {desc}" for key, desc in SURFACE_GLOSSARY.items())
+)
 
 
 class VlmDetection(BaseModel):
@@ -57,7 +89,7 @@ class VlmDetection(BaseModel):
     incline_pct_max: float | None
     bottom_height_cm_min: float | None
     bottom_height_cm_max: float | None
-    surface: str | None
+    surface: SurfaceValue | None
     handrail: bool | None
     contrast_marking: bool | None
     ramp_present: bool | None

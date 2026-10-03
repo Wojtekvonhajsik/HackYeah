@@ -1,8 +1,12 @@
+import os
 from datetime import date
 
 import pytest
 
 from bezbarier.classification import GeoPoint, Observation, Source, SourceType
+
+# Przed importem API: testy nie tworzą pliku bazy (load_dotenv nie nadpisuje już ustawionych zmiennych)
+os.environ["DATABASE_PATH"] = ":memory:"
 
 TODAY = date(2026, 10, 3)
 

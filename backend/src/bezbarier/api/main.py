@@ -31,7 +31,7 @@ from ..classification import (
 from ..detection import Detector, ImageRef, detections_to_observations, get_detector
 from ..scan import ScanResult, scan_images
 from ..sources import mapillary, osm
-from ..storage import InMemoryRepository, Place, Vote, VoteValue
+from ..storage import Place, SqliteRepository, Vote, VoteValue
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 SAMPLE_DATA = BACKEND_DIR / "data" / "sample_observations.json"
@@ -47,7 +47,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-repo = InMemoryRepository.from_file(SAMPLE_DATA) if SAMPLE_DATA.exists() else InMemoryRepository()
+# Baza: plik SQLite (głosy, poprawki, wyniki skanów i dane z OSM przetrwają restart). ":memory:" = bez zapisu.
+DATABASE_PATH = os.environ.get("DATABASE_PATH", str(BACKEND_DIR / "data" / "bezbarier.db"))
+repo = SqliteRepository(DATABASE_PATH)
+if SAMPLE_DATA.exists():
+    repo.load_file(SAMPLE_DATA)
 
 
 class ProfileRequest(BaseModel):
@@ -225,6 +229,7 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
         radius = min(radius * 2, SCAN_MAX_RADIUS_M)
     result = scan_images(place_id, place.location, images, _detector(), repo.analyzed_images, max_images)
     repo.add_observations(result.observations)
+    repo.save_analyzed_images()
     return result.model_copy(update={"radius_m": radius})
 
 
