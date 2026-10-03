@@ -32,6 +32,7 @@ OVERPASS_URLS = (
 )
 OVERPASS_TIMEOUT = httpx.Timeout(30, connect=8)
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup"
 USER_AGENT = "KrakowBezBarier/0.1 (HackYeah prototype)"
 LICENSE = "ODbL"
 
@@ -310,3 +311,16 @@ def search_places(query: str, viewbox: str = KRAKOW_VIEWBOX, limit: int = 10) ->
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def lookup_place(osm_type: str, osm_id: int) -> dict[str, Any] | None:
+    """Jedno miejsce po identyfikatorze OSM (Nominatim lookup) - ten sam format co wyniki search_places."""
+    resp = httpx.get(
+        NOMINATIM_LOOKUP_URL,
+        params={"osm_ids": f"{osm_type[0].upper()}{osm_id}", "format": "jsonv2", "accept-language": "pl"},
+        headers={"User-Agent": USER_AGENT},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    results = resp.json()
+    return results[0] if results else None

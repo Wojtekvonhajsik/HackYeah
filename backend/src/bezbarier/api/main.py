@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -142,26 +143,45 @@ def search_places(q: str) -> list[Place]:
         raise HTTPException(status_code=503, detail="Wyszukiwarka OpenStreetMap jest niedostępna, spróbuj później") from e
     found = []
     for r in results:
-        place = Place(
-            id=f"osm-{r['osm_type']}-{r['osm_id']}",
-            name=r.get("name") or r["display_name"].split(",")[0],
-            address=r["display_name"],
-            location=GeoPoint(lat=float(r["lat"]), lon=float(r["lon"])),
-            osm_type=r["osm_type"],
-            osm_id=int(r["osm_id"]),
-            data_loaded=False,
-        )
+        place = _place_from_nominatim(r)
         repo.add_place(place)
         found.append(repo.places[place.id])
     return found
 
 
+def _place_from_nominatim(r: dict[str, Any]) -> Place:
+    return Place(
+        id=f"osm-{r['osm_type']}-{r['osm_id']}",
+        name=r.get("name") or r["display_name"].split(",")[0],
+        address=r["display_name"],
+        location=GeoPoint(lat=float(r["lat"]), lon=float(r["lon"])),
+        osm_type=r["osm_type"],
+        osm_id=int(r["osm_id"]),
+        data_loaded=False,
+    )
+
+
+def _get_place(place_id: str) -> Place:
+    """Miejsce z pamięci; id w formacie osm-<typ>-<id> odtwarzamy z OSM (np. po restarcie serwera)."""
+    if place_id in repo.places:
+        return repo.places[place_id]
+    m = re.fullmatch(r"osm-(node|way|relation)-(\d+)", place_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail=f"Nie ma miejsca {place_id}")
+    try:
+        result = osm.lookup_place(m.group(1), int(m.group(2)))
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=503, detail="OpenStreetMap jest niedostępne, spróbuj później") from e
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Nie ma miejsca {place_id} w OpenStreetMap")
+    repo.add_place(_place_from_nominatim(result))
+    return repo.places[place_id]
+
+
 @app.post("/places/{place_id}/assessment")
 def place_assessment(place_id: str, req: ProfileRequest) -> Assessment:
-    if place_id not in repo.places:
-        raise HTTPException(status_code=404, detail=f"Nie ma miejsca {place_id}")
     needs = _resolve_needs(req)
-    warnings = _load_place_data(repo.places[place_id])
+    warnings = _load_place_data(_get_place(place_id))
     features = group_observations(repo.observations_for_place(place_id))
     return assess(features, needs, req.today, default_required(needs, "place"), warnings)
 
@@ -185,11 +205,9 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
 
     Każde zdjęcie jest analizowane tylko raz. Po skanie wywołaj /assessment, żeby zobaczyć ocenę.
     """
-    if place_id not in repo.places:
-        raise HTTPException(status_code=404, detail=f"Nie ma miejsca {place_id}")
     if not 1 <= max_images <= 20:
         raise HTTPException(status_code=400, detail="max_images musi być w zakresie 1-20")
-    place = repo.places[place_id]
+    place = _get_place(place_id)
     try:
         images = mapillary.images_near(place.location.lat, place.location.lon, radius_m=radius_m, limit=50)
     except KeyError as e:

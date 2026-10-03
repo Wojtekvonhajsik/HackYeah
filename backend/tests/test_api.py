@@ -204,3 +204,24 @@ def test_missing_api_key_gives_clear_error(monkeypatch):
     resp = client.post("/places/muzeum-kazimierz/scan")
     assert resp.status_code == 400
     assert "No API key" in resp.json()["detail"]
+
+
+def test_osm_place_restored_after_restart(monkeypatch):
+    """Po restarcie serwera repo jest puste - miejsce osm-* odtwarzamy z OSM zamiast zwracać 404."""
+    lookups = []
+
+    def lookup(osm_type, osm_id):
+        lookups.append((osm_type, osm_id))
+        return {**NOMINATIM_RESULT[0], "lat": "50.07", "lon": "19.95"}
+
+    monkeypatch.setattr(main.osm, "lookup_place", lookup)
+    monkeypatch.setattr(main.osm, "fetch_place_observations", lambda *a: [])
+    resp = client.post("/places/osm-node-123/assessment", json={"preset": "step_free_strict", **TODAY})
+    assert resp.status_code == 200
+    assert lookups == [("node", 123)]
+    assert client.get("/places").json()[-1]["name"] == "Kawiarnia Testowa"
+
+
+def test_unknown_place_id():
+    resp = client.post("/places/nie-ma/assessment", json={"preset": "step_free_strict"})
+    assert resp.status_code == 404
