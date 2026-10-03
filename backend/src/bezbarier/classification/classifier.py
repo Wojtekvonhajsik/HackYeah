@@ -11,7 +11,7 @@ from datetime import date
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .models import Feature, FeatureType, GeoPoint, Source
 from .needs import Needs
@@ -45,6 +45,9 @@ class Evidence(BaseModel):
     reasons: list[str]
     trust: float
     status: DataStatus
+    confirmations: int
+    denials: int
+    last_confirmed_at: date | None
 
 
 class FeatureAssessment(BaseModel):
@@ -75,6 +78,7 @@ class Assessment(BaseModel):
     counts: dict[Verdict, int]
     contains_sample_data: bool
     contains_unverified: bool
+    warnings: list[str] = Field(default_factory=list)  # np. niedostępne źródło danych
 
 
 def default_required(needs: Needs, kind: Literal["place", "route"]) -> set[FeatureType]:
@@ -100,6 +104,9 @@ def assess_feature(feature: Feature, needs: Needs, today: date) -> FeatureAssess
             reasons=result.reasons,
             trust=trust_score(obs, today),
             status=data_status(obs, today),
+            confirmations=obs.confirmations,
+            denials=obs.denials,
+            last_confirmed_at=obs.last_confirmed_at,
         ))
     if not evidence:
         return None  # cecha nieistotna dla tego profilu
@@ -139,7 +146,10 @@ def assess(
     needs: Needs,
     today: date | None = None,
     required: Iterable[FeatureType] = (),
+    warnings: Iterable[str] = (),
 ) -> Assessment:
+    """warnings: problemy ze źródłami (np. niedostępne OSM) - wtedy nie mówimy 'brak znanych barier'."""
+    warnings = list(warnings)
     today = today or date.today()
     features = list(features)
     assessed = [a for f in features if (a := assess_feature(f, needs, today)) is not None]
@@ -172,7 +182,10 @@ def assess(
             f"Utrudnienia: {counts[Verdict.DIFFICULT]}, "
             f"do sprawdzenia (mogą być blokadą): {counts[Verdict.UNCERTAIN]}."
         )
-    elif missing:
+    elif not assessed:
+        summary = Summary.INCOMPLETE_DATA
+        text = "Brak danych o tym miejscu istotnych dla Twoich ustawień - nie możemy ocenić dostępności."
+    elif missing or warnings:
         summary = Summary.INCOMPLETE_DATA
         text = "Niepełne dane - nie możemy ocenić dostępności."
     else:
@@ -190,4 +203,5 @@ def assess(
         counts=counts,
         contains_sample_data=any(e.source.sample for e in all_evidence),
         contains_unverified=any(e.status != DataStatus.CONFIRMED for e in all_evidence),
+        warnings=warnings,
     )

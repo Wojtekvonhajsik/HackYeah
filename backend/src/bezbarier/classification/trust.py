@@ -47,24 +47,47 @@ class DataStatus(str, Enum):
     CONFLICTING = "conflicting"  # źródła się nie zgadzają (ustawiane na poziomie cechy)
 
 
+# Tyle potwierdzeń (i co najmniej 2x więcej niż zaprzeczeń) = dane zweryfikowane przez społeczność
+VERIFY_MIN_CONFIRMATIONS = 3
+
+
 def half_life_days(obs: Observation) -> int:
     if obs.attrs.get("temporary"):
         return TEMPORARY_HALF_LIFE_DAYS
     return HALF_LIFE_DAYS[obs.type]
 
 
+def is_community_verified(obs: Observation) -> bool:
+    return obs.confirmations >= VERIFY_MIN_CONFIRMATIONS and obs.confirmations >= 2 * obs.denials
+
+
+def reference_date(obs: Observation) -> date:
+    """Data, od której liczymy wiek: obserwacja albo ostatnie potwierdzenie użytkownika."""
+    if obs.last_confirmed_at is not None:
+        return max(obs.source.observed_at, obs.last_confirmed_at)
+    return obs.source.observed_at
+
+
 def freshness(obs: Observation, today: date) -> float:
-    age_days = max(0, (today - obs.source.observed_at).days)
+    age_days = max(0, (today - reference_date(obs)).days)
     return 0.5 ** (age_days / half_life_days(obs))
 
 
+def vote_factor(obs: Observation) -> float:
+    """1.0 bez głosów; zaprzeczenia obniżają wiarygodność, potwierdzenia ją odbudowują."""
+    return (obs.confirmations + 1) / (obs.confirmations + obs.denials + 1)
+
+
 def trust_score(obs: Observation, today: date) -> float:
-    return round(SOURCE_WEIGHT[obs.source.type] * obs.confidence * freshness(obs, today), 4)
+    weight = SOURCE_WEIGHT[obs.source.type]
+    if is_community_verified(obs):
+        weight = max(weight, SOURCE_WEIGHT[SourceType.VERIFIED_USER])
+    return round(weight * obs.confidence * vote_factor(obs) * freshness(obs, today), 4)
 
 
 def data_status(obs: Observation, today: date) -> DataStatus:
     if freshness(obs, today) < 0.5:
         return DataStatus.OUTDATED
-    if obs.source.type in CONFIRMED_SOURCES:
+    if obs.source.type in CONFIRMED_SOURCES or is_community_verified(obs):
         return DataStatus.CONFIRMED
     return DataStatus.UNVERIFIED

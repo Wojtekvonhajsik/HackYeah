@@ -4,9 +4,9 @@ from bezbarier.classification import FeatureType, Range, Verdict, needs_from_pre
 from bezbarier.classification.needs import MaxThreshold, MinThreshold
 from bezbarier.classification.rules import check_max, check_min, evaluate
 
-WHEELCHAIR = needs_from_preset("wheelchair_manual")
+WHEELCHAIR = needs_from_preset("step_free_strict")
 STROLLER = needs_from_preset("stroller")
-BLIND = needs_from_preset("blind")
+BLIND = needs_from_preset("non_visual")
 
 
 @pytest.mark.parametrize(
@@ -96,7 +96,7 @@ def test_crossing_for_blind():
 
 
 def test_preset_overrides():
-    needs = needs_from_preset("wheelchair_manual", {"mobility": {"max_edge_height_cm": {"soft": 10, "hard": 20}}})
+    needs = needs_from_preset("step_free_strict", {"mobility": {"max_edge_height_cm": {"soft": 10, "hard": 20}}})
     attrs = {"kind": "raised", "height_cm": {"lo": 8, "hi": 15}}
     assert evaluate(FeatureType.KERB, attrs, needs).verdict == Verdict.DIFFICULT
     assert needs.mobility.min_width_cm.soft == 90  # reszta presetu bez zmian

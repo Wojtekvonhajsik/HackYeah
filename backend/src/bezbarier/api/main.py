@@ -2,30 +2,44 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from ..classification import (
-    PRESETS,
     Assessment,
     FeatureType,
+    GeoPoint,
     Needs,
     Observation,
+    PresetInfo,
     assess,
     default_required,
     group_observations,
     needs_from_preset,
+    preset_catalog,
 )
 from ..detection import ImageRef, detections_to_observations, get_detector
-from ..storage import InMemoryRepository, Place
+from ..sources import osm
+from ..storage import InMemoryRepository, Place, Vote, VoteValue
 
 SAMPLE_DATA = Path(__file__).resolve().parents[3] / "data" / "sample_observations.json"
 
 app = FastAPI(title="Kraków bez barier - klasyfikacja barier")
+app.add_middleware(
+    CORSMiddleware,
+    # prototyp: domyślnie wszystko; na produkcji CORS_ORIGINS=https://twoja-domena.pl
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 repo = InMemoryRepository.from_file(SAMPLE_DATA) if SAMPLE_DATA.exists() else InMemoryRepository()
 
 
@@ -48,6 +62,18 @@ class AnalyzeRequest(BaseModel):
     place_id: str | None = None
 
 
+class VoteRequest(BaseModel):
+    voter_id: str
+    value: VoteValue
+    # Przy "deny" można podać, jak jest naprawdę, np. {"kind": "lowered"} - powstanie nowa obserwacja
+    correction_attrs: dict[str, Any] | None = None
+
+
+class VoteResponse(BaseModel):
+    observation: Observation
+    correction: Observation | None = None
+
+
 def _resolve_needs(req: ProfileRequest) -> Needs:
     if req.needs is not None:
         return req.needs
@@ -59,14 +85,19 @@ def _resolve_needs(req: ProfileRequest) -> Needs:
     raise HTTPException(status_code=400, detail="Podaj 'preset' albo 'needs'")
 
 
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse("/docs")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/presets")
-def presets() -> dict[str, Needs]:
-    return PRESETS
+def presets() -> dict[str, PresetInfo]:
+    return preset_catalog()
 
 
 @app.post("/classify")
@@ -82,13 +113,50 @@ def places() -> list[Place]:
     return list(repo.places.values())
 
 
+@app.get("/places/search")
+def search_places(q: str) -> list[Place]:
+    """Wyszukiwanie miejsc w Krakowie (OpenStreetMap / Nominatim)."""
+    try:
+        results = osm.search_places(q)
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=503, detail="Wyszukiwarka OpenStreetMap jest niedostępna, spróbuj później") from e
+    found = []
+    for r in results:
+        place = Place(
+            id=f"osm-{r['osm_type']}-{r['osm_id']}",
+            name=r.get("name") or r["display_name"].split(",")[0],
+            address=r["display_name"],
+            location=GeoPoint(lat=float(r["lat"]), lon=float(r["lon"])),
+            osm_type=r["osm_type"],
+            osm_id=int(r["osm_id"]),
+            data_loaded=False,
+        )
+        repo.add_place(place)
+        found.append(repo.places[place.id])
+    return found
+
+
 @app.post("/places/{place_id}/assessment")
 def place_assessment(place_id: str, req: ProfileRequest) -> Assessment:
     if place_id not in repo.places:
         raise HTTPException(status_code=404, detail=f"Nie ma miejsca {place_id}")
     needs = _resolve_needs(req)
+    warnings = _load_place_data(repo.places[place_id])
     features = group_observations(repo.observations_for_place(place_id))
-    return assess(features, needs, req.today, default_required(needs, "place"))
+    return assess(features, needs, req.today, default_required(needs, "place"), warnings)
+
+
+def _load_place_data(place: Place) -> list[str]:
+    """Przy pierwszej ocenie miejsca z OSM pobieramy cechy z otoczenia. Błąd źródła = ostrzeżenie, nie awaria."""
+    if place.data_loaded:
+        return []
+    place_osm = (place.osm_type, place.osm_id) if place.osm_type and place.osm_id else None
+    try:
+        repo.add_observations(osm.fetch_place_observations(place.id, place.location, place_osm))
+    except httpx.HTTPError:
+        return ["Nie udało się pobrać danych z OpenStreetMap - pokazujemy tylko dane zapisane wcześniej."]
+    repo.mark_loaded(place.id)
+    return []
 
 
 @app.post("/observations/analyze")
@@ -105,3 +173,19 @@ def analyze(req: AnalyzeRequest) -> list[Observation]:
     )
     repo.add_observations(observations)
     return observations
+
+
+@app.post("/observations/{observation_id}/votes")
+def vote(observation_id: str, req: VoteRequest) -> VoteResponse:
+    """Użytkownik potwierdza ("confirm") albo zaprzecza ("deny") informacji. Opcjonalnie podaje poprawkę."""
+    original = repo.get_observation(observation_id)
+    if original is None:
+        raise HTTPException(status_code=404, detail=f"Nie ma obserwacji {observation_id}")
+    if req.correction_attrs is not None and req.value != VoteValue.DENY:
+        raise HTTPException(status_code=400, detail="Poprawkę można dodać tylko do głosu 'deny'")
+    today = date.today()
+    updated = repo.add_vote(Vote(observation_id=observation_id, voter_id=req.voter_id, value=req.value, created_at=today))
+    correction = None
+    if req.correction_attrs is not None:
+        correction = repo.add_correction(original, req.correction_attrs, today)
+    return VoteResponse(observation=updated, correction=correction)

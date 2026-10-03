@@ -13,7 +13,7 @@ from bezbarier.classification import (
     needs_from_preset,
 )
 
-WHEELCHAIR = needs_from_preset("wheelchair_manual")
+WHEELCHAIR = needs_from_preset("step_free_strict")
 
 
 def _conflicting_kerb():
@@ -64,9 +64,22 @@ def test_complete_good_data_gives_no_known_barriers():
     assert "nie jest gwarancja" in result.summary_text
 
 
+def test_no_data_at_all_is_incomplete_for_every_profile():
+    for preset in ("non_visual", "stroller", "step_free_strict"):
+        result = assess([], needs_from_preset(preset), TODAY)
+        assert result.summary == Summary.INCOMPLETE_DATA
+
+
+def test_source_failure_prevents_no_known_barriers():
+    obs = [make_obs("e", "entrance", {"width_cm": 100, "threshold_cm": 0}, source=SourceType.OWNER, observed_at=TODAY, place_id="p")]
+    result = assess(group_observations(obs), WHEELCHAIR, TODAY, required={FeatureType.ENTRANCE}, warnings=["OSM niedostępne"])
+    assert result.summary == Summary.INCOMPLETE_DATA
+    assert result.warnings == ["OSM niedostępne"]
+
+
 def test_irrelevant_features_are_hidden():
     obs = [make_obs("s", "surface", {"value": "gravel"})]
-    result = assess(group_observations(obs), needs_from_preset("blind"), TODAY)
+    result = assess(group_observations(obs), needs_from_preset("non_visual"), TODAY)
     assert result.features == []
 
 

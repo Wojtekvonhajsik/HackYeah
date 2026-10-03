@@ -2,8 +2,17 @@
 
 ## Założenia (z kryteriów wyzwania)
 
-1. **Profil = potrzeby, nie diagnoza.** Presety (`wheelchair_manual`, `stroller`, `blind`...) to tylko
-   wartości startowe progów. Klasyfikator widzi wyłącznie progi i preferencje.
+1. **Profil = potrzeby, nie diagnoza.** Presety opisują potrzebę, a nie niepełnosprawność
+   (np. „Bez stopni, tylko płaskie przejścia” zamiast „jeżdżę na wózku”) i są tylko wartościami startowymi progów.
+   Klasyfikator widzi wyłącznie progi i preferencje.
+
+   | Klucz | Etykieta |
+   |---|---|
+   | `step_free_strict` | Bez stopni, tylko płaskie przejścia |
+   | `step_free` | Bez stopni, niskie progi OK |
+   | `stroller` | Z wózkiem dziecięcym |
+   | `limited_endurance` | Krótkie dystanse, potrzebuję poręczy |
+   | `non_visual` | Orientacja bez wzroku |
 2. **Nigdy "dostępne/niedostępne".** Werdykt per bariera + uzasadnienie. Brak danych ≠ dostępne.
 3. **Źródło, data i wiarygodność przy każdej informacji.** Dane z AI i zgłoszeń są wyraźnie oznaczone jako niepotwierdzone.
 4. **Zdjęcia: Mapillary (CC-BY-SA) / zdjęcia użytkowników**, nie Street View - warunki Google Maps Platform
@@ -37,12 +46,39 @@ Progi mają dwa poziomy: `soft` (komfort) i `hard` (granica). Wymiary z AI to za
 ## Wiarygodność
 
 ```
-trust = waga_źródła × pewność_detektora × 0.5^(wiek / okres_półtrwania[typ])
+trust = waga_źródła × pewność_detektora × głosy × 0.5^(wiek / okres_półtrwania[typ])
+głosy = (potwierdzenia + 1) / (potwierdzenia + zaprzeczenia + 1)
 ```
 
 - Wagi: urzędowe 0.95, właściciel 0.85, zweryfikowane 0.8, OSM 0.7, zgłoszenie 0.5, AI 0.4.
 - Okres półtrwania zależy od typu: krawężnik 2 lata, przeszkoda 90 dni, przeszkoda tymczasowa 14 dni.
+  Wiek liczymy od daty obserwacji albo ostatniego potwierdzenia przez użytkownika (co nowsze).
+  Dla OSM: tag `check_date`, a bez niego data ostatniej edycji elementu.
 - Status: `confirmed` / `unverified` / `outdated` (starsze niż okres półtrwania) / `conflicting`.
+
+## Potwierdzenia i poprawki od użytkowników
+
+`POST /observations/{id}/votes` z `confirm` albo `deny` - jeden głos na urządzenie (losowy `voter_id`, bez kont).
+
+- 3 potwierdzenia (i co najmniej 2× więcej niż zaprzeczeń) → informacja ma status `confirmed`.
+- Każde potwierdzenie odświeża datę informacji; zaprzeczenia obniżają wiarygodność.
+- Przy `deny` można podać `correction_attrs` (jak jest naprawdę) → nowa obserwacja typu „zgłoszenie użytkownika”,
+  która trafia do tej samej cechy - jeśli kłóci się z oryginałem, użytkownik zobaczy konflikt.
+
+## Źródła danych
+
+| Źródło | Co daje | Licencja | Jak pobieramy |
+|---|---|---|---|
+| OpenStreetMap (Nominatim) | wyszukiwanie miejsc w Krakowie | ODbL | `GET /places/search`, na żądanie |
+| OpenStreetMap (Overpass) | krawężniki, przejścia, wejścia, nawierzchnia, schody, ławki, toalety w promieniu 30 m | ODbL | przy pierwszej ocenie miejsca, potem z pamięci |
+| Mapillary | zdjęcia ulic do detekcji AI | CC-BY-SA 4.0 | `sources/mapillary.py` |
+| Zgłoszenia użytkowników | potwierdzenia, poprawki | - | `POST /observations/{id}/votes` |
+
+Gdy źródło jest niedostępne, ocena nadal działa na danych zapisanych wcześniej, a odpowiedź zawiera
+ostrzeżenie w `warnings` (np. „Nie udało się pobrać danych z OpenStreetMap...”).
+
+Tag OSM `wheelchair=yes/limited/no` na obiekcie przeliczamy na przybliżoną wysokość progu (0-2 / 2-7 / 7-30 cm),
+zgodnie z definicjami z wiki OSM - dzięki temu ta sama informacja daje różne werdykty dla różnych profili.
 
 ## Konflikty
 
