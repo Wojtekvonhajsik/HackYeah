@@ -7,13 +7,8 @@ __all__ = ["Detection", "Detector", "ImageRef", "MockDetector", "detections_to_o
 
 
 def get_detector() -> Detector:
-    """DETECTOR=gemini | claude | mock (domyślnie mock - stałe wyniki, bez klucza API)."""
-    kind = os.environ.get("DETECTOR", "mock")
-    if kind == "gemini":
-        from .gemini_vlm import GeminiVisionDetector
-
-        return GeminiVisionDetector()
-    if kind == "claude":
+    """DETECTOR=claude -> model wizyjny Claude (wymaga `pip install .[vlm]` i klucza API), inaczej mock."""
+    if os.environ.get("DETECTOR") == "claude":
         from .claude_vlm import ClaudeVisionDetector
 
         return ClaudeVisionDetector()

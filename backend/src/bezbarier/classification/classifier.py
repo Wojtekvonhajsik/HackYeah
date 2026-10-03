@@ -48,7 +48,6 @@ class Evidence(BaseModel):
     confirmations: int
     denials: int
     last_confirmed_at: date | None
-    note: str | None = None  # np. opis z detektora albo "oszacowane z tagu OSM wheelchair=yes"
 
 
 class FeatureAssessment(BaseModel):
@@ -108,7 +107,6 @@ def assess_feature(feature: Feature, needs: Needs, today: date) -> FeatureAssess
             confirmations=obs.confirmations,
             denials=obs.denials,
             last_confirmed_at=obs.last_confirmed_at,
-            note=obs.attrs.get("description"),
         ))
     if not evidence:
         return None  # cecha nieistotna dla tego profilu
@@ -164,7 +162,7 @@ def assess(
     missing = [
         FEATURE_PL[t]
         for t in sorted(set(required), key=lambda t: t.value)
-        if not any(a.type == t for a in assessed)  # jeśli cecha jest, ale niepełna - niżej konkretne braki
+        if not any(a.type == t and a.verdict != Verdict.UNKNOWN for a in assessed)
     ]
     missing += [
         r.removeprefix("brak danych: ")

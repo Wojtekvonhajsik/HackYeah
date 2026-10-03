@@ -8,13 +8,11 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "httpx>=0.27",
-    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
-# Detektory na modelach wizyjnych (opcjonalne - bez nich działa MockDetector)
-gemini = ["google-genai>=2.28"]
-claude = ["anthropic"]
+# Detektor oparty o model wizyjny Claude (opcjonalny - bez niego działa MockDetector)
+vlm = ["anthropic"]
 dev = ["pytest>=8"]
 
 [build-system]

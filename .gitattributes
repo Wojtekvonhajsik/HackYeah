@@ -1,3 +1,0 @@
-# Pliki uruchamiane w kontenerze Linux muszą mieć końce linii LF
-Dockerfile text eol=lf
-*.sh text eol=lf
