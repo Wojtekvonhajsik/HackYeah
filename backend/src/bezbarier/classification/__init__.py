@@ -1,6 +1,6 @@
 """Klasyfikacja barier wg potrzeb użytkownika. Bez I/O i bez zależności od bazy."""
 
-from .classifier import Assessment, FeatureAssessment, Summary, assess, assess_feature, default_required
+from .classifier import Assessment, FeatureAssessment, Scope, Summary, assess, assess_feature, default_required
 from .fusion import group_observations
 from .models import Feature, FeatureType, GeoPoint, Observation, Range, Source, SourceType
 from .needs import PRESETS, Needs, PresetInfo, needs_from_preset, preset_catalog
@@ -19,6 +19,7 @@ __all__ = [
     "Observation",
     "PresetInfo",
     "Range",
+    "Scope",
     "Source",
     "SourceType",
     "Summary",

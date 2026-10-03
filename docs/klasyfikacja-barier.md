@@ -86,11 +86,41 @@ Obserwacje tego samego typu w promieniu 4 m (wejścia: to samo `place_id`) to je
 Jeśli źródła o porównywalnej wiarygodności (≥ 50% najlepszego) dają różne werdykty dla użytkownika,
 cecha dostaje status `conflicting`, pokazujemy **ostrożniejszy** werdykt i wszystkie dowody.
 
+## Pewność
+
+Dla każdej cechy `confidence_pct` (0-100) - na ile dane potwierdzają werdykt:
+
+```
+za     = 1 - Π(1 - trust)  po źródłach zgodnych z werdyktem   (zgodne źródła wzmacniają się)
+przeciw = 1 - Π(1 - trust)  po źródłach sprzecznych
+pewność = za × (1 - przeciw)
+```
+
+- Jedno świeże źródło OSM → 70%, właściciel → 85%, świeża detekcja AI (pewność modelu 0,9) → 36%,
+  dwie zgodne detekcje AI → 59%. Stare dane tracą pewność razem z wiarygodnością.
+- „Do sprawdzenia” (`uncertain`) maks. 50%; brak danych → brak pewności.
+- **Przeszkoda z pewnością < 30% jest pokazywana jako „do sprawdzenia”** - stare zdjęcie sprzed lat nie przesądza,
+  że miejsce jest nie do pokonania, ale informacja nie znika.
+- To wskaźnik orientacyjny (heurystyka na wagach źródeł), a nie skalibrowane prawdopodobieństwo -
+  kalibracja wymaga porównania z weryfikacją w terenie.
+
+## Miejsce i okolica
+
+Cecha należy do **miejsca** (`scope=place`), gdy jest do niego przypisana: tagi obiektu w OSM, wejście w promieniu 15 m
+(z jego szerokością i stopniami), wejście widoczne na zdjęciu z kamery skierowanej na miejsce, zgłoszenia przy miejscu.
+Reszta w promieniu 30 m (i dalsze zdjęcia ze skanu) to **okolica** (`scope=surroundings`).
+
+O nagłówku decyduje tylko miejsce - schody w okolicy dworca nie znaczą, że dworzec jest „nie do pokonania”.
+Okolica jest podsumowana osobno („W okolicy: schody (przeszkoda) x7, winda. Sprawdź trasę dojścia.”).
+
 ## Podsumowanie miejsca / odcinka
 
-`barriers` > `difficulties` > `incomplete_data` > `no_known_barriers`.
-`incomplete_data`, gdy brakuje kluczowej informacji (dla miejsca i wózka: wejście) albo któraś cecha jest `unknown`.
-`no_known_barriers` zawsze z dopiskiem, że to nie gwarancja dostępności.
+`barriers` > `difficulties` > `incomplete_data` > `no_known_barriers` - liczone z cech miejsca.
+`incomplete_data`, gdy brakuje kluczowej informacji (dla miejsca i wózka: wejście), któraś cecha miejsca jest `unknown`
+albo o samym miejscu nie ma żadnych danych. `no_known_barriers` zawsze z dopiskiem, że to nie gwarancja dostępności.
+
+Pewność nagłówka (`summary_confidence_pct`): przy przeszkodach/utrudnieniach - najpewniejsza z nich;
+przy „brak znanych barier” - najsłabiej potwierdzona informacja o miejscu.
 
 ## Jak rozszerzać
 

@@ -57,6 +57,8 @@ def describe_feature(f: FeatureAssessment) -> str:
         text = f"Udogodnienie: {'; '.join(f.reasons)}."
     else:
         text = f"{_cap(f.label)}: {VERDICT_PL[f.verdict]}. {_cap('; '.join(f.reasons))}."
+    if f.confidence_pct is not None and f.type != FeatureType.AMENITY:
+        text += f" Pewność: {f.confidence_pct}%."
     text += f" Źródło: {origin} ({STATUS_PL[f.status]})."
     if f.conflict:
         text += f" Uwaga: {len(f.evidence)} źródła podają różne informacje."
@@ -66,8 +68,20 @@ def describe_feature(f: FeatureAssessment) -> str:
 
 
 def describe(a: Assessment) -> str:
-    lines = [a.summary_text]
-    lines += [describe_feature(f) for f in a.features]
+    from .classifier import Scope  # import tutaj - classifier importuje ten moduł
+
+    header = a.summary_text
+    if a.summary_confidence_pct is not None:
+        header += f" Pewność oceny: {a.summary_confidence_pct}%."
+    lines = [header]
+    place = [f for f in a.features if f.scope == Scope.PLACE]
+    around = [f for f in a.features if f.scope == Scope.SURROUNDINGS]
+    if place:
+        lines.append("Miejsce i wejście:")
+        lines += [describe_feature(f) for f in place]
+    if around:
+        lines.append("W okolicy (mogą istnieć inne drogi dojścia):")
+        lines += [describe_feature(f) for f in around]
     lines += [f"Ostrzeżenie: {w}" for w in a.warnings]
     if a.contains_sample_data:
         lines.append("Uwaga: ocena zawiera dane przykładowe, nie opisują rzeczywistego obiektu.")

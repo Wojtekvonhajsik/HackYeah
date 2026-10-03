@@ -44,10 +44,12 @@ Body: `{"preset": "step_free_strict"}`. **Pierwsze wywołanie dla miejsca może 
 
 | Pole | Co z nim zrobić |
 |---|---|
-| `summary` | `barriers` / `difficulties` / `incomplete_data` / `no_known_barriers` - nagłówek oceny |
-| `summary_text` | gotowe zdanie do nagłówka |
+| `summary` | `barriers` / `difficulties` / `incomplete_data` / `no_known_barriers` - nagłówek oceny **samego miejsca** (`scope=place`) |
+| `summary_text` | gotowe zdanie do nagłówka, z dopiskiem o okolicy, np. „W okolicy: schody (przeszkoda) x7…” |
+| `summary_confidence_pct` | pewność nagłówka 0-100 (`null` przy niepełnych danych) - pokaż obok, np. „pewność 72%” |
 | `text` | **cała ocena jako tekst** - dla czytnika ekranu (np. region `aria-live`), asystenta głosowego (`speechSynthesis`) i jako tekstowa alternatywa dla mapy |
-| `features[]` | lista barier i udogodnień, od najpoważniejszych |
+| `features[]` | lista barier i udogodnień: najpierw miejsce (`scope=place`), potem okolica (`scope=surroundings`) |
+| `counts`, `surroundings_counts` | liczba cech wg werdyktu - osobno dla miejsca i okolicy |
 | `missing[]` | czego nie wiemy - pokaż wyraźnie |
 | `warnings[]` | np. niedostępne źródło danych - pokaż jako komunikat |
 | `contains_sample_data` | `true` -> baner „dane przykładowe” |
@@ -60,7 +62,9 @@ Każdy element `features[]`:
 | Pole | Opis |
 |---|---|
 | `label`, `type` | np. „krawężnik” / `kerb` |
+| `scope` | `place` = samo miejsce i wejście (decyduje o nagłówku); `surroundings` = okolica, pokaż w osobnej sekcji „W okolicy” - mogą istnieć inne drogi dojścia |
 | `verdict` | `blocker` / `uncertain` / `difficult` / `unknown` / `ok` / `amenity` |
+| `confidence_pct` | na ile dane potwierdzają werdykt, 0-100 (`null` = brak danych). Przeszkoda z pewnością < 30% przychodzi jako `uncertain` |
 | `reasons[]` | uzasadnienie po polsku, np. „krawężnik 8-15 cm - powyżej Twojego limitu 4 cm” |
 | `status` | `confirmed` / `unverified` / `outdated` / `conflicting` |
 | `location` | punkt na mapę |
