@@ -38,6 +38,20 @@ Przykład:
 curl -X POST localhost:8000/places/kawiarnia-rynek/assessment -H "Content-Type: application/json" -d '{"preset": "step_free_strict"}'
 ```
 
+## Aplikacja webowa (telefon)
+
+Backend serwuje aplikację pod `http://localhost:8000/` (przekierowanie na `/app/`, pliki w `backend/web/`, bez kroku
+budowania). Projektowana najpierw pod telefon, z obsługą klawiatury i czytnika ekranu (WCAG 2.2 AA).
+
+Na telefonie w tej samej sieci Wi-Fi:
+
+```bash
+.venv\Scripts\python -m uvicorn bezbarier.api.main:app --host 0.0.0.0 --port 8000
+```
+
+i na telefonie otwórz `http://<adres IP komputera>:8000` (adres: `ipconfig`, pole „IPv4”). Windows może zapytać
+o dostęp przez zaporę - zezwól dla sieci prywatnej. W Chrome na Androidzie: menu → „Dodaj do ekranu głównego”.
+
 ## Główne endpointy
 
 | Endpoint | Co robi |

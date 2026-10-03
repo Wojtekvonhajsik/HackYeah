@@ -18,10 +18,17 @@ def fresh_repo(monkeypatch):
     monkeypatch.setattr(security, "_vote_limiter", None)
 
 
-def test_root_redirects_to_docs():
+def test_root_redirects_to_app():
     resp = client.get("/", follow_redirects=False)
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"] == "/docs"
+    assert resp.headers["location"] == "/app/"
+
+
+def test_web_app_served():
+    resp = client.get("/app/")
+    assert resp.status_code == 200
+    assert '<html lang="pl"' in resp.text
+    assert client.get("/app/app.js").status_code == 200
 
 
 def test_cors():

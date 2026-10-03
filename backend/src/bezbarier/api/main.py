@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ..classification import (
@@ -37,6 +38,7 @@ from .security import limit_votes, require_admin
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 SAMPLE_DATA = BACKEND_DIR / "data" / "sample_observations.json"
+WEB_DIR = BACKEND_DIR / "web"  # aplikacja webowa (mobile-first), serwowana pod /app/
 
 # Klucze (MAPILLARY_TOKEN, GEMINI_API_KEY, DETECTOR...) z backend/.env - plik jest w .gitignore
 load_dotenv(BACKEND_DIR / ".env")
@@ -118,7 +120,11 @@ def _detector() -> Detector:
 
 @app.get("/", include_in_schema=False)
 def root() -> RedirectResponse:
-    return RedirectResponse("/docs")
+    return RedirectResponse("/app/" if WEB_DIR.exists() else "/docs")
+
+
+if WEB_DIR.exists():
+    app.mount("/app", StaticFiles(directory=WEB_DIR, html=True), name="app")
 
 
 @app.get("/health")

@@ -28,6 +28,8 @@ PUBLIC_OVERPASS_URLS = [
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 OVERPASS_TIMEOUT = httpx.Timeout(30, connect=8)
+# Łączny limit na wszystkie serwery i ponowienia - użytkownik czeka na ocenę, lepiej ostrzeżenie niż minuta czekania
+OVERPASS_TOTAL_BUDGET_S = 35
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup"
 USER_AGENT = "KrakowBezBarier/0.1 (HackYeah prototype)"
@@ -287,10 +289,15 @@ def fetch_place_observations(
     query = overpass_query(location.lat, location.lon, radius_m, place_osm)
     last_error: httpx.HTTPError | None = None
     urls = [os.environ["OVERPASS_URL"]] if os.environ.get("OVERPASS_URL") else PUBLIC_OVERPASS_URLS
+    deadline = time.monotonic() + OVERPASS_TOTAL_BUDGET_S
     for url in urls:
         for attempt in range(2):
+            remaining = deadline - time.monotonic()
+            if remaining <= 1:
+                raise last_error or httpx.TimeoutException("Przekroczony łączny czas pobierania z Overpass")
+            timeout = httpx.Timeout(min(30, remaining), connect=min(8, remaining))
             try:
-                resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=OVERPASS_TIMEOUT)
+                resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=timeout)
                 resp.raise_for_status()
                 return parse_overpass(resp.json(), today, place_id, location, place_osm)
             except httpx.HTTPStatusError as e:
