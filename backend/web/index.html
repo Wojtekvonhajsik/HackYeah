@@ -75,6 +75,11 @@
       </form>
       <div id="search-results" aria-live="polite"></div>
 
+      <a class="card assistant-entry" href="#/asystent">
+        <strong>Nie wiesz, czego szukać? Zapytaj asystenta</strong>
+        <span>np. „Gdzie zjem bez schodów?” - odpowiada na podstawie naszych danych</span>
+      </a>
+
       <h2 class="section-title">Ostatnio sprawdzane</h2>
       <ul id="recent" class="place-list"></ul>
 
@@ -88,6 +93,27 @@
         </ul>
         <p>Pewność w % rośnie, gdy źródła się zgadzają. Brak danych nigdy nie oznacza „dostępne”.</p>
       </details>
+    </section>
+
+    <!-- ============ ASYSTENT ============ -->
+    <section id="view-assistant" class="view" hidden aria-labelledby="assistant-title">
+      <a class="back" href="#/">← Wróć do wyszukiwania</a>
+      <h1 id="assistant-title">Zapytaj asystenta</h1>
+      <p class="lead">Podpowie miejsca na podstawie naszych danych, dopasowane do Twojego profilu.</p>
+      <form id="assistant-form" class="search">
+        <label for="assistant-input" class="visually-hidden">Twoje pytanie</label>
+        <input id="assistant-input" type="search" maxlength="300" placeholder="np. Gdzie zjem bez schodów?" autocomplete="off" enterkeyhint="send" required>
+        <button id="assistant-mic" class="btn icon" type="button" hidden aria-label="Zadaj pytanie głosowo">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        </button>
+        <button class="btn primary" type="submit">Zapytaj</button>
+      </form>
+      <ul class="chips" aria-label="Przykładowe pytania">
+        <li><button class="chip chip-btn" type="button" data-question="Gdzie zjem coś bez schodów?">Gdzie zjem bez schodów?</button></li>
+        <li><button class="chip chip-btn" type="button" data-question="Jakie muzeum mogę odwiedzić?">Jakie muzeum?</button></li>
+        <li><button class="chip chip-btn" type="button" data-question="Gdzie mogę załatwić sprawę w urzędzie?">Urząd</button></li>
+      </ul>
+      <div id="assistant-answer" aria-live="polite"></div>
     </section>
 
     <!-- ============ WŁAŚCICIEL OBIEKTU ============ -->

@@ -7,9 +7,10 @@ import os
 import re
 import threading
 import time
+import uuid
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from concurrent.futures import wait as futures_wait
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -38,11 +39,13 @@ from ..classification import (
 from ..classification.describe import describe
 from ..classification.report_schema import validate_report
 from ..detection import Detector, ImageRef, detections_to_observations, get_detector
+from ..assistant import AssistantAnswer, Candidate, answer_question
 from ..safety import PlaceSafety, assess_safety
 from ..scan import ScanResult, scan_images
 from ..sources import gus, mapillary, osm
-from ..storage import PLACE_RADIUS_M, Place, SqliteRepository, Vote, VoteValue
-from .security import limit_votes, require_admin
+from ..classification.needs import PRESET_LABELS
+from ..storage import PLACE_RADIUS_M, Place, SqliteRepository, Sponsorship, Vote, VoteValue
+from .security import limit_assistant, limit_votes, require_admin
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 SAMPLE_DATA = BACKEND_DIR / "data" / "sample_observations.json"
@@ -340,6 +343,91 @@ def _ensure_osm(place: Place, today: date, wait_s: float = 0) -> OsmState:
     if (error := job.exception()) is not None:
         return _failure_state(repo.places[place.id], error)
     return OsmState()
+
+
+# ---------- asystent AI i miejsca sponsorowane ----------
+
+class AssistantRequest(ProfileRequest):
+    question: str = Field(min_length=3, max_length=300)
+
+
+class SponsorshipRequest(BaseModel):
+    place_id: str
+    sponsor_name: str = Field(min_length=2, max_length=80)
+    tagline: str = Field(min_length=3, max_length=120)
+    days: int = Field(default=30, ge=1, le=365)
+
+
+def _candidate(place: Place, needs: Needs, today: date) -> Candidate | None:
+    observations = repo.observations_for_place(place.id)
+    if not observations:
+        return None
+    a = assess(group_observations(observations), needs, today, default_required(needs, "place"), place_id=place.id)
+    highlights = [f"{f.label}: {f.reasons[0]}" for f in a.features if f.scope.value == "place" and f.reasons][:3]
+    return Candidate(
+        place_id=place.id,
+        name=place.name,
+        kind=place.kind,
+        summary=a.summary.value,
+        summary_confidence_pct=a.summary_confidence_pct,
+        missing=a.missing,
+        highlights=highlights,
+        sponsorship=repo.active_sponsorship(place.id, today),
+    )
+
+
+@app.post("/assistant", dependencies=[Depends(limit_assistant)])
+def assistant(req: AssistantRequest) -> AssistantAnswer:
+    """Asystent odpowiada na pytanie na podstawie ocen miejsc dla profilu pytającego.
+
+    Model AI (Gemini Flash-Lite, gdy jest GEMINI_API_KEY) nie widzi reklam; miejsce sponsorowane jest
+    dokładane osobno, oznaczone i tylko gdy dla tego profilu nie ma znanych przeszkód.
+    """
+    needs = _resolve_needs(req)
+    today = req.today or date.today()
+    candidates = [c for p in list(repo.places.values()) if not p.sample and (c := _candidate(p, needs, today))]
+    label = PRESET_LABELS.get(needs.preset or "", ("własne ustawienia",))[0]
+    result = answer_question(req.question, candidates, label, use_llm=bool(os.environ.get("GEMINI_API_KEY")))
+    if result.sponsored is not None:
+        repo.count_sponsor_event(result.sponsored.sponsorship_id, "impressions")
+    return result
+
+
+@app.post("/sponsorships/{sponsorship_id}/click", dependencies=[Depends(limit_votes)])
+def sponsorship_click(sponsorship_id: str) -> dict[str, str]:
+    """Kliknięcie w miejsce sponsorowane - statystyka dla reklamodawcy (bez danych o użytkowniku)."""
+    if repo.count_sponsor_event(sponsorship_id, "clicks") is None:
+        raise HTTPException(status_code=404, detail="Nie ma takiej kampanii")
+    return {"status": "ok"}
+
+
+@app.post("/admin/sponsorships", dependencies=[Depends(require_admin)])
+def create_sponsorship(req: SponsorshipRequest) -> Sponsorship:
+    """Nowa kampania. Warunek: właściciel potwierdził dane o dostępności miejsca kodem właściciela."""
+    place = _get_place(req.place_id)
+    if not repo.has_owner_data(place.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Reklamować można tylko miejsca z danymi o dostępności potwierdzonymi przez właściciela "
+            "(formularz właściciela, scripts/owner_code.py)",
+        )
+    today = date.today()
+    sponsorship = Sponsorship(
+        id=f"sp-{uuid.uuid4().hex[:10]}",
+        place_id=place.id,
+        sponsor_name=req.sponsor_name.strip(),
+        tagline=req.tagline.strip(),
+        starts=today,
+        ends=today + timedelta(days=req.days - 1),
+    )
+    repo.add_sponsorship(sponsorship)
+    return sponsorship
+
+
+@app.get("/admin/sponsorships", dependencies=[Depends(require_admin)])
+def list_sponsorships() -> list[Sponsorship]:
+    """Kampanie ze statystykami wyświetleń i kliknięć - raport dla reklamodawców."""
+    return sorted(repo.sponsorships.values(), key=lambda s: s.starts, reverse=True)
 
 
 @app.get("/stats/city")

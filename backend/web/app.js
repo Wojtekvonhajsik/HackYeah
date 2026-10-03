@@ -227,17 +227,20 @@ function route() {
   } else if (!profile()) {
     store.set("returnTo", hash); // po wyborze profilu wracamy tam, dokąd szedł użytkownik
     view = "profile";
+  } else if (hash.startsWith("#/asystent")) {
+    view = "assistant";
   } else if (hash.startsWith("#/miejsce/")) {
     view = "place";
     arg = decodeURIComponent(hash.slice("#/miejsce/".length));
   }
-  for (const name of ["profile", "search", "place", "owner"]) $(`#view-${name}`).hidden = name !== view;
+  for (const name of ["profile", "search", "place", "owner", "assistant"]) $(`#view-${name}`).hidden = name !== view;
   $("#profile-chip-label").textContent = profileLabel();
   stopSpeaking();
   if (view === "profile") showProfile();
   if (view === "search") showSearch();
   if (view === "place") showPlace(arg);
   if (view === "owner") showOwner(arg);
+  if (view === "assistant") showAssistant();
 }
 
 function focusHeading(id) {
@@ -361,25 +364,77 @@ async function onSearchSubmit(event) {
   }
 }
 
-function setupVoiceSearch() {
+// Wprowadzanie głosowe dla pola: mikrofon -> tekst w polu -> wysłanie formularza
+function setupVoiceInput(micSelector, inputSelector, formSelector, prompt) {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) return; // przeglądarka bez rozpoznawania mowy - przycisk zostaje ukryty
-  const mic = $("#mic");
+  const mic = $(micSelector);
   mic.hidden = false;
   mic.addEventListener("click", () => {
     const recognition = new Recognition();
     recognition.lang = "pl-PL";
     recognition.interimResults = false;
     mic.dataset.listening = "true";
-    announce("Słucham. Powiedz nazwę miejsca.");
+    announce(prompt);
     recognition.onresult = (event) => {
-      $("#search-input").value = event.results[0][0].transcript;
-      $("#search-form").requestSubmit();
+      $(inputSelector).value = event.results[0][0].transcript;
+      $(formSelector).requestSubmit();
     };
-    recognition.onerror = () => announce("Nie udało się rozpoznać mowy. Wpisz nazwę miejsca.");
+    recognition.onerror = () => announce("Nie udało się rozpoznać mowy. Wpisz tekst.");
     recognition.onend = () => { mic.dataset.listening = "false"; };
     recognition.start();
   });
+}
+
+// ---------- widok: asystent ----------
+
+function showAssistant() {
+  focusHeading("#assistant-title");
+}
+
+function assistantPlace(place, onClickAttr = "") {
+  const summary = SUMMARY[place.summary] || SUMMARY.incomplete_data;
+  const confidence = place.summary_confidence_pct !== null ? ` · pewność ${place.summary_confidence_pct}%` : "";
+  return `<a class="place-link" href="#/miejsce/${encodeURIComponent(place.place_id)}" ${onClickAttr}>
+    <strong><span class="verdict-icon v-${summary.verdict}" aria-hidden="true">${VERDICT[summary.verdict].symbol}</span> ${esc(place.name)}</strong>
+    <small>${esc(place.summary_text)}${confidence}</small>
+  </a>`;
+}
+
+async function onAssistantSubmit(event) {
+  event.preventDefault();
+  const question = $("#assistant-input").value.trim();
+  if (question.length < 3) return;
+  const box = $("#assistant-answer");
+  box.innerHTML = loadingHtml("Asystent przegląda dane…");
+  const p = profile();
+  try {
+    const a = await api("/assistant", {
+      method: "POST",
+      body: JSON.stringify({ question, preset: p.preset, overrides: p.overrides }),
+    });
+    const sponsored = a.sponsored;
+    box.innerHTML = `
+      <section class="card answer" aria-labelledby="answer-title">
+        <h2 id="answer-title" class="visually-hidden">Odpowiedź asystenta</h2>
+        <p>${esc(a.answer)}</p>
+        ${a.places.length ? `<ul class="place-list">${a.places.map((pl) => `<li>${assistantPlace(pl)}</li>`).join("")}</ul>` : ""}
+        <p class="source-note">${esc(a.engine.startsWith("reguły") ? "Odpowiedź bez modelu AI (reguły)." : `Model AI: ${a.engine}.`)} ${esc(a.disclosure)}</p>
+      </section>
+      ${sponsored ? `
+      <aside class="card sponsored" aria-label="Miejsce sponsorowane">
+        <p class="sponsored-label">Sponsorowane · ${esc(sponsored.sponsor_name)}</p>
+        <p>${esc(sponsored.tagline)}</p>
+        ${assistantPlace(sponsored, `data-sponsorship="${esc(sponsored.sponsorship_id)}"`)}
+        <details class="evidence"><summary>Dlaczego to widzę?</summary>
+          <p class="hint">Właściciel potwierdził dane o dostępności i wykupił promocję. Pokazujemy ją tylko osobom,
+          dla których to miejsce nie ma znanych przeszkód. Reklama nie zmienia ocen ani odpowiedzi asystenta.</p>
+        </details>
+      </aside>` : ""}`;
+    speakText(a.answer); // przy włączonym czytaniu odpowiedź jest od razu odczytywana
+  } catch (error) {
+    box.innerHTML = `<p class="notice warn" role="alert">${esc(error.message)}</p>`;
+  }
 }
 
 // ---------- widok: miejsce ----------
@@ -941,7 +996,18 @@ function init() {
   updateVoiceToggle();
   $("#owner-form").addEventListener("submit", onOwnerSubmit);
   window.addEventListener("hashchange", route);
-  setupVoiceSearch();
+  setupVoiceInput("#mic", "#search-input", "#search-form", "Słucham. Powiedz nazwę miejsca.");
+  setupVoiceInput("#assistant-mic", "#assistant-input", "#assistant-form", "Słucham. Zadaj pytanie.");
+  $("#assistant-form").addEventListener("submit", onAssistantSubmit);
+  $("#view-assistant").addEventListener("click", (event) => {
+    const example = event.target.closest("[data-question]");
+    if (example) {
+      $("#assistant-input").value = example.dataset.question;
+      $("#assistant-form").requestSubmit();
+    }
+    const ad = event.target.closest("[data-sponsorship]");
+    if (ad) fetch(`/sponsorships/${encodeURIComponent(ad.dataset.sponsorship)}/click`, { method: "POST" }).catch(() => null);
+  });
   loadPresets().catch(() => null).finally(route);
 }
 

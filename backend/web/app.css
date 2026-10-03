@@ -256,6 +256,22 @@ details.around { margin-top: 20px; }
 .safety-tips { margin: 0 0 4px; padding-left: 20px; }
 .safety-tips li { margin-bottom: 4px; }
 
+/* ---------- asystent i miejsca sponsorowane ---------- */
+.assistant-entry {
+  display: grid; gap: 4px; margin-top: 16px; text-decoration: none; color: var(--text);
+  border-left: 6px solid var(--primary);
+}
+.assistant-entry strong { color: var(--primary); }
+.assistant-entry span { color: var(--muted); font-size: 0.95rem; }
+.chip-btn { cursor: pointer; font: inherit; font-size: 0.9rem; color: var(--text); min-height: 44px; }
+.answer .place-list { margin: 8px 0; }
+.place-link .verdict-icon { width: 24px; height: 24px; font-size: 0.85rem; vertical-align: middle; }
+.sponsored { border: 2px dashed var(--border); background: var(--bg); box-shadow: none; }
+.sponsored-label {
+  display: inline-block; margin: 0 0 6px; padding: 2px 8px; border-radius: 6px;
+  font-size: 0.8rem; font-weight: 700; color: var(--difficult); background: var(--difficult-bg);
+}
+
 /* ---------- formularze zgłoszeń ---------- */
 .form-grid { display: grid; gap: 6px; }
 .form-grid label { font-size: 0.95rem; margin-top: 6px; }
