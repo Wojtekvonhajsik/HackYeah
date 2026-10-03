@@ -11,8 +11,9 @@ from datetime import date
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
+from .describe import describe
 from .models import Feature, FeatureType, GeoPoint, Source
 from .needs import Needs
 from .rules import evaluate
@@ -48,6 +49,7 @@ class Evidence(BaseModel):
     confirmations: int
     denials: int
     last_confirmed_at: date | None
+    note: str | None = None  # np. opis z detektora albo "oszacowane z tagu OSM wheelchair=yes"
 
 
 class FeatureAssessment(BaseModel):
@@ -60,6 +62,7 @@ class FeatureAssessment(BaseModel):
     status: DataStatus
     trust: float
     conflict: bool
+    primary_observation_id: str  # obserwacja, z której pochodzi werdykt (przy konflikcie - ostrożniejsza)
     evidence: list[Evidence]  # wszystkie źródła, najbardziej wiarygodne pierwsze
 
 
@@ -79,6 +82,12 @@ class Assessment(BaseModel):
     contains_sample_data: bool
     contains_unverified: bool
     warnings: list[str] = Field(default_factory=list)  # np. niedostępne źródło danych
+
+    @computed_field  # liczone przy serializacji, więc obejmuje też ostrzeżenia dopisane po assess()
+    @property
+    def text(self) -> str:
+        """Cała ocena jako tekst - dla czytnika ekranu, asystenta głosowego i jako alternatywa dla mapy."""
+        return describe(self)
 
 
 def default_required(needs: Needs, kind: Literal["place", "route"]) -> set[FeatureType]:
@@ -107,6 +116,7 @@ def assess_feature(feature: Feature, needs: Needs, today: date) -> FeatureAssess
             confirmations=obs.confirmations,
             denials=obs.denials,
             last_confirmed_at=obs.last_confirmed_at,
+            note=obs.attrs.get("description"),
         ))
     if not evidence:
         return None  # cecha nieistotna dla tego profilu
@@ -137,6 +147,7 @@ def assess_feature(feature: Feature, needs: Needs, today: date) -> FeatureAssess
         status=status,
         trust=chosen.trust,
         conflict=conflict,
+        primary_observation_id=chosen.observation_id,
         evidence=evidence,
     )
 
@@ -162,7 +173,7 @@ def assess(
     missing = [
         FEATURE_PL[t]
         for t in sorted(set(required), key=lambda t: t.value)
-        if not any(a.type == t and a.verdict != Verdict.UNKNOWN for a in assessed)
+        if not any(a.type == t for a in assessed)  # jeśli cecha jest, ale niepełna - niżej konkretne braki
     ]
     missing += [
         r.removeprefix("brak danych: ")

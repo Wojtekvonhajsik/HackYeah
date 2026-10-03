@@ -54,7 +54,7 @@ def test_unknown_feature_prevents_no_known_barriers():
     obs = [make_obs("e", "entrance", {"width_cm": 100}, place_id="p")]  # próg nieznany
     result = assess(group_observations(obs), WHEELCHAIR, TODAY, required={FeatureType.ENTRANCE})
     assert result.summary == Summary.INCOMPLETE_DATA
-    assert "próg w wejściu" in result.missing
+    assert result.missing == ["próg w wejściu"]  # bez ogólnego "wejście" - wiemy, czego konkretnie brakuje
 
 
 def test_complete_good_data_gives_no_known_barriers():
@@ -96,3 +96,20 @@ def test_features_sorted_worst_first():
 def test_unverified_flag():
     obs = [make_obs("s", "surface", {"value": "asphalt"}, source=SourceType.AI_DETECTION, observed_at=TODAY)]
     assert assess(group_observations(obs), WHEELCHAIR, TODAY).contains_unverified
+
+
+def test_text_names_source_of_verdict_not_most_trusted():
+    result = assess(group_observations(_conflicting_kerb()), WHEELCHAIR, TODAY)
+    [kerb] = result.features
+    assert kerb.primary_observation_id == "ai"
+    line = result.text.splitlines()[1]
+    assert line.startswith("Krawężnik: przeszkoda nie do pokonania")
+    assert "automatyczna analiza zdjęcia z 12.06.2025" in line
+    assert "2 źródła podają różne informacje" in line
+
+
+def test_text_mentions_warnings_added_after_assess():
+    result = assess([], WHEELCHAIR, TODAY)
+    result.warnings.append("OSM niedostępne")
+    assert "Ostrzeżenie: OSM niedostępne" in result.text
+    assert "Ostrzeżenie: OSM niedostępne" in result.model_dump()["text"]

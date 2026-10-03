@@ -1,15 +1,18 @@
 # Backend - Kraków bez barier
 
-Klasyfikacja barier wg potrzeb użytkownika. Projekt: [docs/klasyfikacja-barier.md](../docs/klasyfikacja-barier.md).
+Klasyfikacja barier wg potrzeb użytkownika. Projekt: [docs/klasyfikacja-barier.md](../docs/klasyfikacja-barier.md),
+wdrożenie (Docker, koszty, ochrona danych): [docs/wdrozenie.md](../docs/wdrozenie.md),
+instrukcja dla frontendu: [docs/api-frontend.md](../docs/api-frontend.md).
 
 ## Struktura
 
 ```
 src/bezbarier/
   classification/   # rdzeń: model danych, profile, reguły, wiarygodność, fuzja, klasyfikator (bez I/O)
-  detection/        # detektory zdjęć: MockDetector, ClaudeVisionDetector
+  detection/        # detektory zdjęć: MockDetector, GeminiVisionDetector, ClaudeVisionDetector
+  scan.py           # skan okolicy miejsca: zdjęcia Mapillary -> detektor -> obserwacje
   sources/          # adaptery źródeł: OpenStreetMap (Nominatim + Overpass), Mapillary
-  storage.py        # repozytorium w pamięci (docelowo PostGIS)
+  storage.py        # repozytorium: SQLite (backend/data/bezbarier.db) albo w pamięci w testach
   api/main.py       # FastAPI
 data/sample_observations.json   # DANE PRZYKŁADOWE do demo
 ```
@@ -42,6 +45,7 @@ curl -X POST localhost:8000/places/kawiarnia-rynek/assessment -H "Content-Type: 
 | `GET /presets` | profile potrzeb z etykietami dla użytkownika |
 | `GET /places/search?q=...` | wyszukiwanie miejsc w Krakowie (OSM Nominatim) |
 | `POST /places/{id}/assessment` | ocena miejsca dla profilu; przy pierwszym wywołaniu pobiera cechy z OSM (Overpass) |
+| `POST /places/{id}/scan` | analiza zdjęć Mapillary wokół miejsca (każde zdjęcie tylko raz; z `ADMIN_TOKEN` wymaga nagłówka `X-Admin-Token`) |
 | `POST /observations/{id}/votes` | potwierdzenie / zaprzeczenie informacji, opcjonalnie z poprawką |
 | `POST /classify` | czysta klasyfikacja przesłanych obserwacji |
 | `POST /observations/analyze` | detekcja cech na zdjęciu |
@@ -49,14 +53,32 @@ curl -X POST localhost:8000/places/kawiarnia-rynek/assessment -H "Content-Type: 
 Frontend z innego portu: CORS jest domyślnie otwarty, na produkcji ustaw `CORS_ORIGINS`.
 Publiczne serwery Overpass bywają przeciążone - aplikacja próbuje kilku, a własną instancję ustawisz przez `OVERPASS_URL`.
 
-## Detektor
+## Klucze i detektor
 
-Domyślnie `MockDetector` (stałe wyniki, oznaczone jako dane przykładowe). Model wizyjny Claude:
+Skopiuj `.env.example` jako `.env` (w folderze `backend`) i uzupełnij. `.env` jest w `.gitignore`.
+
+| Zmienna | Do czego |
+|---|---|
+| `MAPILLARY_TOKEN` | zdjęcia do `/places/{id}/scan` |
+| `DETECTOR` | `mock` (domyślnie, stałe wyniki oznaczone jako przykładowe), `gemini` albo `claude` |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | detektor Gemini (domyślnie `gemini-3.5-flash-lite`), wymaga `pip install -e ".[gemini]"` |
+| `ANTHROPIC_API_KEY` | detektor Claude, wymaga `pip install -e ".[claude]"` |
+
+Testy zawsze używają detektora `mock`, niezależnie od `.env`.
+
+## Baza danych
+
+Głosy, poprawki, dane pobrane z OSM i wyniki skanów zapisują się w `backend/data/bezbarier.db` (SQLite, plik w `.gitignore`)
+i przetrwają restart serwera. Żeby zacząć od zera, zatrzymaj serwer i usuń ten plik.
+
+## Przygotowanie demo
+
+Przed prezentacją, na sprawdzonej sieci i przy zatrzymanym serwerze:
 
 ```bash
-pip install -e ".[vlm]"
-export ANTHROPIC_API_KEY=...
-export DETECTOR=claude
+.venv\Scripts\python scripts\prepare_demo.py
 ```
 
-Zdjęcia z Mapillary: `bezbarier.sources.mapillary.images_near(lat, lon)` (wymaga `MAPILLARY_TOKEN`).
+Skrypt wyszukuje kilka miejsc w Krakowie, pobiera dla nich dane z OSM i analizuje po 3 zdjęcia
+(`--max-images`, `--no-scan`, własne nazwy miejsc jako argumenty). Wszystko trafia do bazy, więc na demo
+dane są dostępne nawet przy problemach z siecią. Na końcu wypisuje id miejsc.
