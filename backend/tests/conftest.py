@@ -1,8 +1,12 @@
+import os
 from datetime import date
 
 import pytest
 
 from bezbarier.classification import GeoPoint, Observation, Source, SourceType
+
+# Przed importem API: testy nie tworzą pliku bazy (load_dotenv nie nadpisuje już ustawionych zmiennych)
+os.environ["DATABASE_PATH"] = ":memory:"
 
 TODAY = date(2026, 10, 3)
 
@@ -10,6 +14,12 @@ TODAY = date(2026, 10, 3)
 @pytest.fixture
 def today() -> date:
     return TODAY
+
+
+@pytest.fixture(autouse=True)
+def mock_detector(monkeypatch):
+    """Testy nigdy nie wołają płatnych API, nawet jeśli w backend/.env jest DETECTOR=gemini."""
+    monkeypatch.setenv("DETECTOR", "mock")
 
 
 def make_obs(
