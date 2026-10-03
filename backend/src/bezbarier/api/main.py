@@ -5,6 +5,10 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
+import time
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from concurrent.futures import wait as futures_wait
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -34,7 +38,7 @@ from ..classification import (
 from ..classification.report_schema import validate_report
 from ..detection import Detector, ImageRef, detections_to_observations, get_detector
 from ..scan import ScanResult, scan_images
-from ..sources import mapillary, osm
+from ..sources import gus, mapillary, osm
 from ..storage import PLACE_RADIUS_M, Place, SqliteRepository, Vote, VoteValue
 from .security import limit_votes, require_admin
 
@@ -183,7 +187,11 @@ def places() -> list[Place]:
 
 @app.get("/places/search")
 def search_places(q: str) -> list[Place]:
-    """Wyszukiwanie miejsc w Krakowie (OpenStreetMap / Nominatim)."""
+    """Wyszukiwanie miejsc w Krakowie (OpenStreetMap / Nominatim).
+
+    Dla pierwszych wyników od razu zaczynamy w tle pobierać dane z OSM - zanim użytkownik kliknie,
+    część danych zwykle już jest.
+    """
     try:
         results = osm.search_places(q)
     except httpx.HTTPError as e:
@@ -193,6 +201,8 @@ def search_places(q: str) -> list[Place]:
         place = _place_from_nominatim(r)
         repo.add_place(place)
         found.append(repo.places[place.id])
+    for place in found[:PREFETCH_RESULTS]:
+        _ensure_osm(place, date.today())
     return found
 
 
@@ -204,6 +214,7 @@ def _place_from_nominatim(r: dict[str, Any]) -> Place:
         location=GeoPoint(lat=float(r["lat"]), lon=float(r["lon"])),
         osm_type=r["osm_type"],
         osm_id=int(r["osm_id"]),
+        kind=f"{r['category']}:{r['type']}" if r.get("category") and r.get("type") else None,
         data_loaded=False,
     )
 
@@ -226,38 +237,91 @@ def _get_place(place_id: str) -> Place:
 
 
 @app.post("/places/{place_id}/assessment")
-def place_assessment(place_id: str, req: ProfileRequest) -> Assessment:
+def place_assessment(place_id: str, req: ProfileRequest, wait: bool = False) -> Assessment:
+    """Ocena wraca od razu. Jeśli dane z OSM jeszcze się pobierają, pending_sources = ["OpenStreetMap"] -
+    frontend pokazuje wynik i odpytuje ponownie co kilka sekund. wait=true czeka na OSM (skrypty)."""
     needs = _resolve_needs(req)
-    warnings, notes = _load_place_data(_get_place(place_id), req.today or date.today())
+    state = _ensure_osm(_get_place(place_id), req.today or date.today(), wait_s=OSM_WAIT_S if wait else 0)
+    warnings = state.warnings + ([OSM_PENDING_MESSAGE] if state.pending else [])
     features = group_observations(repo.observations_for_place(place_id))
     result = assess(features, needs, req.today, default_required(needs, "place"), warnings, place_id=place_id)
-    result.warnings.extend(notes)  # informacja dla użytkownika, ale nie obniża oceny
+    result.warnings.extend(state.notes)  # informacja dla użytkownika, ale nie obniża oceny
+    result.pending_sources = ["OpenStreetMap"] if state.pending else []
     return result
 
 
-def _load_place_data(place: Place, today: date) -> tuple[list[str], list[str]]:
-    """Pobiera cechy z OSM przy pierwszej ocenie miejsca i odświeża je co OSM_REFRESH_DAYS dni.
+# ---------- pobieranie danych z OSM w tle ----------
 
-    Zwraca (ostrzeżenia, informacje). Ostrzeżenie = nie mamy danych z OSM wcale (ocena nie może być
-    "brak znanych barier"); informacja = odświeżenie się nie udało, ale mamy wcześniejsze dane.
-    """
-    place_osm = (place.osm_type, place.osm_id) if place.osm_type and place.osm_id else None
+PREFETCH_RESULTS = 2         # dla tylu pierwszych wyników wyszukiwania pobieramy OSM od razu
+OSM_RETRY_COOLDOWN_S = 120   # po nieudanym pobraniu nie próbujemy ponownie przez tyle sekund
+OSM_WAIT_S = 45              # maks. czekanie przy wait=true
+OSM_PENDING_MESSAGE = "Pobieramy dane z OpenStreetMap - ocena uzupełni się za chwilę."
+
+osm_executor: Executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="osm-load")
+_osm_jobs: dict[str, Future] = {}
+_osm_failed_at: dict[str, float] = {}
+_osm_lock = threading.Lock()
+
+
+class OsmState(BaseModel):
+    pending: bool = False
+    warnings: list[str] = Field(default_factory=list)  # brak danych z OSM - ocena nie może być "brak barier"
+    notes: list[str] = Field(default_factory=list)     # odświeżenie nieudane, ale są wcześniejsze dane
+
+
+def _osm_needs_load(place: Place, today: date) -> bool:
+    has_osm = bool(place.osm_type and place.osm_id)
     refresh_days = int(os.environ.get("OSM_REFRESH_DAYS", "30"))
     stale = place.data_loaded_at is None or (today - place.data_loaded_at).days >= refresh_days
-    if place.data_loaded and not (place_osm and stale):
-        return [], []
+    return not place.data_loaded or (has_osm and stale)
+
+
+def _load_osm(place: Place, today: date) -> None:
+    place_osm = (place.osm_type, place.osm_id) if place.osm_type and place.osm_id else None
     try:
         repo.add_observations(osm.fetch_place_observations(place.id, place.location, place_osm))
     except httpx.HTTPError as e:
-        reason = osm.describe_error(e)
+        _osm_failed_at[place.id] = time.monotonic()
         logging.getLogger(__name__).warning("OSM dla %s nieudane: %r", place.id, e)
-        if place.data_loaded:
-            return [], [
-                f"Nie udało się odświeżyć danych z OpenStreetMap ({reason}) - pokazujemy dane z {place.data_loaded_at}."
-            ]
-        return [f"Nie udało się pobrać danych z OpenStreetMap ({reason}) - pokazujemy tylko dane zapisane wcześniej."], []
+        raise
     repo.mark_loaded(place.id, today)
-    return [], []
+
+
+def _failure_state(place: Place, error: BaseException) -> OsmState:
+    reason = osm.describe_error(error) if isinstance(error, httpx.HTTPError) else "błąd"
+    if place.data_loaded:
+        note = f"Nie udało się odświeżyć danych z OpenStreetMap ({reason}) - pokazujemy dane z {place.data_loaded_at}."
+        return OsmState(notes=[note])
+    warning = f"Nie udało się pobrać danych z OpenStreetMap ({reason}) - pokazujemy tylko dane zapisane wcześniej."
+    return OsmState(warnings=[warning])
+
+
+def _ensure_osm(place: Place, today: date, wait_s: float = 0) -> OsmState:
+    """Uruchamia (raz) pobieranie OSM w tle i zwraca jego stan - nigdy nie blokuje dłużej niż wait_s."""
+    if not _osm_needs_load(place, today):
+        return OsmState()
+    with _osm_lock:
+        job = _osm_jobs.get(place.id)
+        recently_failed = time.monotonic() - _osm_failed_at.get(place.id, -1e9) < OSM_RETRY_COOLDOWN_S
+        if job is None or (job.done() and not recently_failed):
+            job = osm_executor.submit(_load_osm, place, today)
+            _osm_jobs[place.id] = job
+    if wait_s:
+        futures_wait([job], timeout=wait_s)
+    if not job.done():
+        return OsmState(pending=True)
+    if (error := job.exception()) is not None:
+        return _failure_state(repo.places[place.id], error)
+    return OsmState()
+
+
+@app.get("/stats/city")
+def city_stats() -> gus.CityStats:
+    """Dane GUS dla miasta: skala potrzeb (osoby z niepełnosprawnościami, seniorzy) i dostępność bazy noclegowej."""
+    try:
+        return gus.city_stats()
+    except (httpx.HTTPError, ValueError, KeyError) as e:
+        raise HTTPException(status_code=503, detail="Dane GUS są chwilowo niedostępne") from e
 
 
 SCAN_MAX_RADIUS_M = 100

@@ -21,9 +21,14 @@
       <img src="icon.svg" alt="" width="28" height="28">
       <span>Kraków bez barier</span>
     </a>
-    <a class="profile-chip" href="#/profil" id="profile-chip">
-      <span class="visually-hidden">Twój profil: </span><span id="profile-chip-label">Wybierz profil</span>
-    </a>
+    <div class="topbar-actions">
+      <button id="voice-toggle" class="voice-toggle" type="button" aria-pressed="true">
+        <span aria-hidden="true">🔊</span><span class="visually-hidden">Czytanie wybranych opcji na głos: </span><span class="voice-state">wł.</span>
+      </button>
+      <a class="profile-chip" href="#/profil" id="profile-chip">
+        <span class="visually-hidden">Twój profil: </span><span id="profile-chip-label">Wybierz profil</span>
+      </a>
+    </div>
   </header>
 
   <main id="main" tabindex="-1">
@@ -73,14 +78,17 @@
       <h2 class="section-title">Ostatnio sprawdzane</h2>
       <ul id="recent" class="place-list"></ul>
 
+      <div id="city-stats"></div>
+
       <details class="card about">
-        <summary>Skąd są dane i jak je oceniamy?</summary>
+        <summary>Skąd są dane?</summary>
         <ul>
-          <li><strong>OpenStreetMap</strong> - krawężniki, wejścia, schody, nawierzchnia (dane społecznościowe).</li>
-          <li><strong>Automatyczna analiza zdjęć ulic</strong> (Mapillary + AI) - zawsze oznaczona jako niepotwierdzona.</li>
-          <li><strong>Użytkownicy</strong> - potwierdzenia i poprawki przy każdej informacji.</li>
+          <li>OpenStreetMap - wejścia, schody, krawężniki, nawierzchnia</li>
+          <li>Zdjęcia ulic + AI - oznaczone „AI”, zawsze niepotwierdzone</li>
+          <li>Użytkownicy i właściciele obiektów</li>
+          <li>GUS - statystyki miasta</li>
         </ul>
-        <p>Przy każdej informacji pokazujemy źródło, datę i status. <strong>Pewność w %</strong> mówi, na ile dane potwierdzają ocenę - rośnie, gdy źródła się zgadzają, i spada, gdy dane są stare albo sprzeczne. Brak danych nigdy nie oznacza „dostępne”.</p>
+        <p>Pewność w % rośnie, gdy źródła się zgadzają. Brak danych nigdy nie oznacza „dostępne”.</p>
       </details>
     </section>
 

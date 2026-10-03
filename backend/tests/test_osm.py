@@ -113,19 +113,29 @@ def _response(status: int, body: dict | None = None) -> httpx.Response:
     return httpx.Response(status, json=body or {}, request=httpx.Request("POST", "https://overpass.test"))
 
 
-def test_overpass_retries_after_rate_limit(monkeypatch):
-    responses = [_response(429), _response(200, OVERPASS)]
-    monkeypatch.setattr(osm.httpx, "post", lambda *a, **k: responses.pop(0))
-    monkeypatch.setattr(osm.time, "sleep", lambda s: None)
-    monkeypatch.setenv("OVERPASS_URL", "https://overpass.test")
+def test_overpass_query_uses_bbox():
+    query = osm.overpass_query(50.0617, 19.9373, 30, ("way", 26195267))
+    assert "around" not in query
+    assert "way(id:26195267);" in query
+    assert "node(50.061431,19.936880,50.061969,19.937720)" in query  # ok. 30 m w każdą stronę
+
+
+def test_first_successful_server_wins(monkeypatch):
+    """Serwery pytane równolegle - jeden odrzuca (limit), drugi odpowiada: bierzemy odpowiedź."""
+    def post(url, **kwargs):
+        if "busy" in url:
+            return _response(429)
+        return _response(200, OVERPASS)
+
+    monkeypatch.setattr(osm, "PUBLIC_OVERPASS_URLS", ["https://busy.test", "https://ok.test"])
+    monkeypatch.setattr(osm.httpx, "post", post)
+    monkeypatch.delenv("OVERPASS_URL", raising=False)
     obs = osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
     assert len(obs) == 8
-    assert responses == []
 
 
 def test_overpass_gives_up_with_readable_reason(monkeypatch):
     monkeypatch.setattr(osm.httpx, "post", lambda *a, **k: _response(429))
-    monkeypatch.setattr(osm.time, "sleep", lambda s: None)
     monkeypatch.setenv("OVERPASS_URL", "https://overpass.test")
     with pytest.raises(httpx.HTTPStatusError) as exc:
         osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
@@ -133,18 +143,16 @@ def test_overpass_gives_up_with_readable_reason(monkeypatch):
 
 
 def test_overpass_stops_after_total_budget(monkeypatch):
-    clock = [0.0]
-    calls = []
+    import time
 
     def slow_post(*args, **kwargs):
-        calls.append(kwargs["timeout"].read)
-        clock[0] += 20  # każdy serwer "wisi" 20 s
-        raise httpx.ConnectTimeout("timeout")
+        time.sleep(0.5)  # serwer "wisi" dłużej niż łączny limit
+        return _response(200, OVERPASS)
 
+    monkeypatch.setattr(osm, "OVERPASS_TOTAL_BUDGET_S", 0.1)
     monkeypatch.setattr(osm.httpx, "post", slow_post)
-    monkeypatch.setattr(osm.time, "monotonic", lambda: clock[0])
-    monkeypatch.delenv("OVERPASS_URL", raising=False)
+    monkeypatch.setenv("OVERPASS_URL", "https://overpass.test")
+    started = time.monotonic()
     with pytest.raises(httpx.TimeoutException):
         osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
-    assert len(calls) == 2  # 35 s budżetu: drugi serwer dostaje resztę czasu, trzeciego już nie próbujemy
-    assert calls[1] == 15
+    assert time.monotonic() - started < 0.4  # nie czekamy na wolny serwer

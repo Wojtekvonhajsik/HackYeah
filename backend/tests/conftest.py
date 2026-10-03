@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import Executor, Future
 from datetime import date
 
 import pytest
@@ -14,6 +15,27 @@ TODAY = date(2026, 10, 3)
 @pytest.fixture
 def today() -> date:
     return TODAY
+
+
+class SyncExecutor(Executor):
+    """Zadania "w tle" wykonują się od razu - testy są powtarzalne."""
+
+    def submit(self, fn, /, *args, **kwargs):
+        future = Future()
+        try:
+            future.set_result(fn(*args, **kwargs))
+        except BaseException as e:  # noqa: BLE001 - przekazujemy dalej jak prawdziwy executor
+            future.set_exception(e)
+        return future
+
+
+@pytest.fixture(autouse=True)
+def sync_osm_loading(monkeypatch):
+    from bezbarier.api import main
+
+    monkeypatch.setattr(main, "osm_executor", SyncExecutor())
+    monkeypatch.setattr(main, "_osm_jobs", {})
+    monkeypatch.setattr(main, "_osm_failed_at", {})
 
 
 @pytest.fixture(autouse=True)
