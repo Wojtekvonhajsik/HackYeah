@@ -27,7 +27,7 @@ from ..classification import (
     needs_from_preset,
     preset_catalog,
 )
-from ..detection import ImageRef, detections_to_observations, get_detector
+from ..detection import Detector, ImageRef, detections_to_observations, get_detector
 from ..scan import ScanResult, scan_images
 from ..sources import mapillary, osm
 from ..storage import InMemoryRepository, Place, Vote, VoteValue
@@ -89,6 +89,20 @@ def _resolve_needs(req: ProfileRequest) -> Needs:
         except KeyError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
     raise HTTPException(status_code=400, detail="Podaj 'preset' albo 'needs'")
+
+
+def _detector() -> Detector:
+    """Czytelny błąd zamiast 500, gdy detektor nie jest skonfigurowany."""
+    kind = os.environ.get("DETECTOR", "mock")
+    try:
+        return get_detector()
+    except ImportError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f'Brak biblioteki dla DETECTOR={kind}. W folderze backend: pip install -e ".[{kind}]" ({e})',
+        ) from e
+    except ValueError as e:  # np. brak klucza API
+        raise HTTPException(status_code=400, detail=f"Nie da się uruchomić detektora {kind}: {e}") from e
 
 
 @app.get("/", include_in_schema=False)
@@ -182,7 +196,7 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
         raise HTTPException(status_code=400, detail="Brak MAPILLARY_TOKEN - ustaw go w backend/.env") from e
     except httpx.HTTPError as e:
         raise HTTPException(status_code=503, detail="Mapillary jest niedostępne, spróbuj później") from e
-    result = scan_images(place_id, place.location, images, get_detector(), repo.analyzed_images, max_images)
+    result = scan_images(place_id, place.location, images, _detector(), repo.analyzed_images, max_images)
     repo.add_observations(result.observations)
     return result
 
@@ -190,7 +204,7 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
 @app.post("/observations/analyze")
 def analyze(req: AnalyzeRequest) -> list[Observation]:
     """Uruchamia detektor na zdjęciu i zapisuje obserwacje (niezależne od profilu)."""
-    detector = get_detector()
+    detector = _detector()
     detections = detector.detect(req.image)
     observations = detections_to_observations(
         req.image,
