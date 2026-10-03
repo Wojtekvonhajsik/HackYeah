@@ -194,6 +194,10 @@ def assess_feature(
     )
 
 
+def cap(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
 def _count(features: list[FeatureAssessment]) -> dict[Verdict, int]:
     counts = {v: 0 for v in Verdict}
     for a in features:
@@ -263,10 +267,12 @@ def assess(
         summary_confidence = most_confident({Verdict.BLOCKER})
     elif counts[Verdict.UNCERTAIN] or counts[Verdict.DIFFICULT]:
         summary = Summary.DIFFICULTIES
-        text = (
-            f"Utrudnienia: {counts[Verdict.DIFFICULT]}, "
-            f"do sprawdzenia (mogą być blokadą): {counts[Verdict.UNCERTAIN]}."
-        )
+        parts = []
+        if counts[Verdict.DIFFICULT]:
+            parts.append(f"utrudnienia: {counts[Verdict.DIFFICULT]}")
+        if counts[Verdict.UNCERTAIN]:
+            parts.append(f"do sprawdzenia (mogą być przeszkodą): {counts[Verdict.UNCERTAIN]}")
+        text = cap(", ".join(parts)) + "."
         summary_confidence = most_confident({Verdict.DIFFICULT, Verdict.UNCERTAIN})
     elif not place:
         summary = Summary.INCOMPLETE_DATA

@@ -130,3 +130,21 @@ def test_overpass_gives_up_with_readable_reason(monkeypatch):
     with pytest.raises(httpx.HTTPStatusError) as exc:
         osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
     assert osm.describe_error(exc.value) == "serwer ogranicza liczbę zapytań"
+
+
+def test_overpass_stops_after_total_budget(monkeypatch):
+    clock = [0.0]
+    calls = []
+
+    def slow_post(*args, **kwargs):
+        calls.append(kwargs["timeout"].read)
+        clock[0] += 20  # każdy serwer "wisi" 20 s
+        raise httpx.ConnectTimeout("timeout")
+
+    monkeypatch.setattr(osm.httpx, "post", slow_post)
+    monkeypatch.setattr(osm.time, "monotonic", lambda: clock[0])
+    monkeypatch.delenv("OVERPASS_URL", raising=False)
+    with pytest.raises(httpx.TimeoutException):
+        osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
+    assert len(calls) == 2  # 35 s budżetu: drugi serwer dostaje resztę czasu, trzeciego już nie próbujemy
+    assert calls[1] == 15

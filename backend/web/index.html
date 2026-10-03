@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kraków bez barier</title>
+  <meta name="description" content="Sprawdź, czy miejsce w Krakowie odpowiada Twoim potrzebom: bariery, udogodnienia, źródła i aktualność danych.">
+  <meta name="theme-color" content="#0b5cad" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1720" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Przejdź do treści</a>
+
+  <header class="topbar">
+    <a class="brand" href="#/" aria-label="Kraków bez barier - strona główna">
+      <img src="icon.svg" alt="" width="28" height="28">
+      <span>Kraków bez barier</span>
+    </a>
+    <a class="profile-chip" href="#/profil" id="profile-chip">
+      <span class="visually-hidden">Twój profil: </span><span id="profile-chip-label">Wybierz profil</span>
+    </a>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <!-- Komunikaty o ładowaniu i błędach dla czytników ekranu -->
+    <p id="status" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <!-- ============ PROFIL ============ -->
+    <section id="view-profile" class="view" hidden aria-labelledby="profile-title">
+      <h1 id="profile-title">Czego potrzebujesz?</h1>
+      <p class="lead">Wybierz opis, który najlepiej pasuje. Nie pytamy o niepełnosprawność, a Twój wybór zostaje tylko na tym urządzeniu.</p>
+      <form id="profile-form">
+        <fieldset class="presets">
+          <legend class="visually-hidden">Profil potrzeb</legend>
+          <div id="preset-list" class="preset-list"></div>
+        </fieldset>
+
+        <details id="tune" class="card tune">
+          <summary>Dostosuj progi do siebie</summary>
+          <p class="hint">Np. jeśli pokonujesz wyższe progi niż typowo - zmień limit. Puste pole = wartość z profilu.</p>
+          <div class="tune-grid">
+            <label for="tune-edge">Najwyższy próg / krawężnik, który pokonasz (cm)</label>
+            <input id="tune-edge" type="number" inputmode="decimal" min="0" max="50" step="1">
+            <label for="tune-width">Najwęższe przejście, które zmieścisz (cm)</label>
+            <input id="tune-width" type="number" inputmode="decimal" min="30" max="200" step="5">
+            <label for="tune-steps">Ile schodów pokonasz (0 = żadnych)</label>
+            <input id="tune-steps" type="number" inputmode="numeric" min="0" max="50" step="1">
+          </div>
+        </details>
+
+        <button class="btn primary block" type="submit">Zapisz i szukaj miejsc</button>
+      </form>
+    </section>
+
+    <!-- ============ SZUKAJ ============ -->
+    <section id="view-search" class="view" hidden aria-labelledby="search-title">
+      <h1 id="search-title">Dokąd się wybierasz?</h1>
+      <form id="search-form" class="search" role="search">
+        <label for="search-input" class="visually-hidden">Nazwa miejsca w Krakowie</label>
+        <input id="search-input" type="search" placeholder="np. Sukiennice, Teatr Słowackiego" autocomplete="off" enterkeyhint="search" required>
+        <button id="mic" class="btn icon" type="button" hidden aria-label="Wyszukaj głosowo">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        </button>
+        <button class="btn primary" type="submit">Szukaj</button>
+      </form>
+      <div id="search-results" aria-live="polite"></div>
+
+      <h2 class="section-title">Ostatnio sprawdzane</h2>
+      <ul id="recent" class="place-list"></ul>
+
+      <details class="card about">
+        <summary>Skąd są dane i jak je oceniamy?</summary>
+        <ul>
+          <li><strong>OpenStreetMap</strong> - krawężniki, wejścia, schody, nawierzchnia (dane społecznościowe).</li>
+          <li><strong>Automatyczna analiza zdjęć ulic</strong> (Mapillary + AI) - zawsze oznaczona jako niepotwierdzona.</li>
+          <li><strong>Użytkownicy</strong> - potwierdzenia i poprawki przy każdej informacji.</li>
+        </ul>
+        <p>Przy każdej informacji pokazujemy źródło, datę i status. <strong>Pewność w %</strong> mówi, na ile dane potwierdzają ocenę - rośnie, gdy źródła się zgadzają, i spada, gdy dane są stare albo sprzeczne. Brak danych nigdy nie oznacza „dostępne”.</p>
+      </details>
+    </section>
+
+    <!-- ============ MIEJSCE ============ -->
+    <section id="view-place" class="view" hidden aria-labelledby="place-title">
+      <a class="back" href="#/">← Wróć do wyszukiwania</a>
+      <h1 id="place-title"></h1>
+      <p id="place-address" class="muted"></p>
+      <div id="place-body"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Mapa i dane: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a> (ODbL) · Zdjęcia: Mapillary (CC-BY-SA 4.0) · Prototyp HackYeah 2026</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
