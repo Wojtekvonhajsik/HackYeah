@@ -1,7 +1,8 @@
 # API dla frontendu
 
 Interaktywna dokumentacja z możliwością wywołań: `http://<adres-backendu>:8000/docs`.
-CORS jest otwarty, więc frontend może działać na innym porcie.
+CORS jest otwarty, więc frontend może działać na innym porcie. Dla telefonu/emulatora uruchom backend z
+`--host 0.0.0.0` i podaj adres komputera w sieci (klient Expo: `EXPO_PUBLIC_API_URL`).
 
 ## Główny scenariusz
 
@@ -23,7 +24,7 @@ CORS jest otwarty, więc frontend może działać na innym porcie.
 ```
 
 - Pokaż `label` + `description`. **Nie pytaj o niepełnosprawność** - to wymóg z kryteriów.
-- Zapisz wybrany klucz (np. `"stroller"`) w `localStorage`. Serwer nie przechowuje profilu - wysyłasz go przy każdej ocenie.
+- Zapisz wybrany klucz (np. `"stroller"`) w pamięci urządzenia. Serwer nie przechowuje profilu - wysyłasz go przy każdej ocenie.
 - Zaawansowane: użytkownik może zmienić progi - wyślij `overrides`, np.
   `{"preset": "step_free_strict", "overrides": {"mobility": {"max_edge_height_cm": {"soft": 3, "hard": 5}}}}`.
 
@@ -34,7 +35,8 @@ CORS jest otwarty, więc frontend może działać na innym porcie.
   "location": {"lat": 50.0617, "lon": 19.9373}, ...}]
 ```
 
-`id` jest stałe - można go użyć w linku (`/miejsce/osm-way-23256528`), działa także po restarcie serwera.
+`id` jest stałe - można go zapisać (ulubione, historia) i użyć później; działa także po restarcie serwera,
+bo miejsca `osm-*` backend odtwarza sam, a dane trzyma w bazie.
 
 ### 3. Ocena - `POST /places/{id}/assessment`
 
@@ -83,11 +85,11 @@ Werdykt pokazuj **tekstem i ikoną, nie samym kolorem** (WCAG). Proponowane etyk
 {"voter_id": "<losowy id urządzenia>", "value": "deny", "correction_attrs": {"kind": "lowered"}}
 ```
 
-- `voter_id`: wygeneruj raz `crypto.randomUUID()` i trzymaj w `localStorage` - bez kont i danych osobowych.
+- `voter_id`: wygeneruj raz losowy UUID i trzymaj na urządzeniu (tak robi już `getVoterId()` w `frontend/src/api/client.ts`) - bez kont i danych osobowych.
 - `observation_id` bierzesz z `features[].evidence[]`.
 - Po głosie pobierz ocenę ponownie. Limit: 30 głosów na godzinę z jednego adresu (odpowiedź `429` + nagłówek `Retry-After`).
 
-## Przykład (JavaScript)
+## Przykład (fetch)
 
 ```js
 const API = "http://localhost:8000";
