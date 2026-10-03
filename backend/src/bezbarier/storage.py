@@ -43,6 +43,7 @@ class InMemoryRepository:
         self.places: dict[str, Place] = {}
         self._observations: dict[str, Observation] = {}
         self._votes: dict[str, dict[str, Vote]] = {}  # observation_id -> voter_id -> głos
+        self.analyzed_images: set[str] = set()  # "<provider>-<id>" - nie analizujemy zdjęcia dwa razy
 
     def add_place(self, place: Place) -> None:
         existing = self.places.get(place.id)
@@ -62,13 +63,19 @@ class InMemoryRepository:
         return self._with_votes(obs) if obs is not None else None
 
     def observations_for_place(self, place_id: str, radius_m: float = 30) -> list[Observation]:
-        """Obserwacje przypisane do miejsca + te z najbliższego otoczenia (chodnik, krawężnik przed wejściem)."""
+        """Obserwacje przypisane do miejsca + te z najbliższego otoczenia (chodnik, krawężnik przed wejściem).
+
+        Dane przykładowe trafiają tylko do miejsc przykładowych - nie mieszamy ich z prawdziwymi.
+        """
         place = self.places[place_id]
         return [
             self._with_votes(obs)
             for obs in self._observations.values()
-            if obs.place_id == place_id
-            or (obs.place_id is None and haversine_m(obs.location, place.location) <= radius_m)
+            if (place.sample or not obs.source.sample)
+            and (
+                obs.place_id == place_id
+                or (obs.place_id is None and haversine_m(obs.location, place.location) <= radius_m)
+            )
         ]
 
     def add_vote(self, vote: Vote) -> Observation:

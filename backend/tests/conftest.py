@@ -12,6 +12,12 @@ def today() -> date:
     return TODAY
 
 
+@pytest.fixture(autouse=True)
+def mock_detector(monkeypatch):
+    """Testy nigdy nie wołają płatnych API, nawet jeśli w backend/.env jest DETECTOR=gemini."""
+    monkeypatch.setenv("DETECTOR", "mock")
+
+
 def make_obs(
     obs_id: str,
     type_: str,
