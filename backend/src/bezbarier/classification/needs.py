@@ -1,7 +1,8 @@
 """Model potrzeb użytkownika.
 
 Zgodnie z kryteriami wyzwania NIE pytamy o niepełnosprawność - profil to zestaw progów
-i preferencji. Presety ("wózek", "niewidomy") to tylko wygodne wartości startowe,
+i preferencji. Presety opisują potrzeby ("bez stopni", "orientacja bez wzroku"), a nie
+niepełnosprawność. To tylko wygodne wartości startowe,
 które użytkownik może dowolnie zmienić.
 
 Wartości w PRESETS są orientacyjne - do walidacji z użytkownikami.
@@ -70,8 +71,8 @@ _SURFACES_ROUGH = {"sett", "cobblestone", "unhewn_cobblestone"}
 _SURFACES_LOOSE = {"gravel", "fine_gravel", "compacted", "grass", "sand", "dirt", "ground", "mud"}
 
 PRESETS: dict[str, Needs] = {
-    "wheelchair_manual": Needs(
-        preset="wheelchair_manual",
+    "step_free_strict": Needs(
+        preset="step_free_strict",
         mobility=MobilityNeeds(
             max_edge_height_cm=MaxThreshold(soft=2, hard=4),
             max_step_count=MaxThreshold(soft=0, hard=0),
@@ -82,8 +83,8 @@ PRESETS: dict[str, Needs] = {
         ),
         wants={"toilets_wheelchair", "elevator"},
     ),
-    "wheelchair_electric": Needs(
-        preset="wheelchair_electric",
+    "step_free": Needs(
+        preset="step_free",
         mobility=MobilityNeeds(
             max_edge_height_cm=MaxThreshold(soft=3, hard=6),
             max_step_count=MaxThreshold(soft=0, hard=0),
@@ -106,8 +107,8 @@ PRESETS: dict[str, Needs] = {
         ),
         wants={"bench"},
     ),
-    "low_mobility": Needs(
-        preset="low_mobility",
+    "limited_endurance": Needs(
+        preset="limited_endurance",
         mobility=MobilityNeeds(
             max_edge_height_cm=MaxThreshold(soft=10, hard=20),
             max_step_count=MaxThreshold(soft=2, hard=20),
@@ -119,11 +120,53 @@ PRESETS: dict[str, Needs] = {
         ),
         wants={"bench"},
     ),
-    "blind": Needs(
-        preset="blind",
+    "non_visual": Needs(
+        preset="non_visual",
         vision=VisionNeeds(),
     ),
 }
+
+
+class PresetInfo(BaseModel):
+    label: str
+    description: str
+    needs: Needs
+
+
+# Etykiety do pokazania użytkownikowi. Przykłady sprzętu ("np. ...") tylko jako podpowiedź.
+PRESET_LABELS: dict[str, tuple[str, str]] = {
+    "step_free_strict": (
+        "Bez stopni, tylko płaskie przejścia",
+        "Każdy stopień to przeszkoda nie do pokonania, próg maks. 2-4 cm, przejście min. 80-90 cm, "
+        "unikam bruku (np. wózek z napędem ręcznym).",
+    ),
+    "step_free": (
+        "Bez stopni, niskie progi OK",
+        "Każdy stopień to przeszkoda nie do pokonania, próg maks. 3-6 cm, przejście min. 85-95 cm "
+        "(np. wózek elektryczny, skuter).",
+    ),
+    "stroller": (
+        "Z wózkiem dziecięcym",
+        "Kilka stopni da się pokonać z wysiłkiem, próg maks. 4-12 cm, przejście min. 60-70 cm.",
+    ),
+    "limited_endurance": (
+        "Krótkie dystanse, potrzebuję poręczy",
+        "Pojedyncze stopnie OK, schody tylko z poręczą, przydają się ławki "
+        "(np. kule, balkonik, osoby starsze).",
+    ),
+    "non_visual": (
+        "Orientacja bez wzroku",
+        "Ważne: ścieżki dotykowe, sygnalizacja dźwiękowa, kontrastowe krawędzie schodów, "
+        "brak przeszkód na wysokości głowy.",
+    ),
+}
+
+
+def preset_catalog() -> dict[str, PresetInfo]:
+    return {
+        key: PresetInfo(label=PRESET_LABELS[key][0], description=PRESET_LABELS[key][1], needs=needs)
+        for key, needs in PRESETS.items()
+    }
 
 
 def needs_from_preset(name: str, overrides: dict[str, Any] | None = None) -> Needs:

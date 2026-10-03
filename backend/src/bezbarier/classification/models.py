@@ -98,6 +98,10 @@ class Observation(BaseModel):
     source: Source
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)  # pewność detektora; 1.0 dla danych spoza AI
     place_id: str | None = None     # jeśli cecha dotyczy konkretnego miejsca (np. wejście do kawiarni)
+    # Głosy użytkowników ("to prawda" / "to nieprawda") - liczone przez repozytorium
+    confirmations: int = 0
+    denials: int = 0
+    last_confirmed_at: date | None = None
 
 
 class Feature(BaseModel):
