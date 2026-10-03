@@ -1,0 +1,74 @@
+{
+  "_note": "DANE PRZYKŁADOWE do demo - nie opisują rzeczywistych obiektów. Każde źródło ma sample=true.",
+  "places": [
+    {
+      "id": "kawiarnia-rynek",
+      "name": "Przykładowa kawiarnia przy Rynku (DANE PRZYKŁADOWE)",
+      "location": {"lat": 50.0617, "lon": 19.9373},
+      "sample": true
+    },
+    {
+      "id": "muzeum-kazimierz",
+      "name": "Przykładowe muzeum na Kazimierzu (DANE PRZYKŁADOWE)",
+      "location": {"lat": 50.051, "lon": 19.944},
+      "sample": true
+    }
+  ],
+  "observations": [
+    {
+      "id": "osm-kerb-1",
+      "type": "kerb",
+      "attrs": {"kind": "lowered"},
+      "location": {"lat": 50.06165, "lon": 19.93725},
+      "source": {"type": "osm", "name": "OpenStreetMap (przykład)", "license": "ODbL", "observed_at": "2023-05-10", "sample": true}
+    },
+    {
+      "id": "mly-1001-0",
+      "type": "kerb",
+      "attrs": {"kind": "raised", "height_cm": {"lo": 8, "hi": 15}, "description": "Wysoki krawężnik przed wejściem"},
+      "location": {"lat": 50.06166, "lon": 19.93726},
+      "confidence": 0.82,
+      "source": {"type": "ai_detection", "name": "Mapillary 1001 (przykład, detekcja: vlm)", "license": "CC-BY-SA 4.0", "observed_at": "2025-06-12", "sample": true}
+    },
+    {
+      "id": "mly-1001-1",
+      "type": "surface",
+      "attrs": {"value": "sett"},
+      "location": {"lat": 50.06166, "lon": 19.93726},
+      "confidence": 0.9,
+      "source": {"type": "ai_detection", "name": "Mapillary 1001 (przykład, detekcja: vlm)", "license": "CC-BY-SA 4.0", "observed_at": "2025-06-12", "sample": true}
+    },
+    {
+      "id": "owner-entrance-1",
+      "type": "entrance",
+      "attrs": {"width_cm": 95},
+      "location": {"lat": 50.0617, "lon": 19.9373},
+      "place_id": "kawiarnia-rynek",
+      "source": {"type": "owner", "name": "Formularz właściciela (przykład)", "observed_at": "2026-04-01", "sample": true}
+    },
+    {
+      "id": "osm-steps-1",
+      "type": "steps",
+      "attrs": {"count": 2, "ramp": true, "handrail": true},
+      "location": {"lat": 50.0617, "lon": 19.9373},
+      "place_id": "kawiarnia-rynek",
+      "source": {"type": "osm", "name": "OpenStreetMap (przykład)", "license": "ODbL", "observed_at": "2024-09-01", "sample": true}
+    },
+    {
+      "id": "user-toilet-1",
+      "type": "amenity",
+      "attrs": {"kind": "toilets_wheelchair"},
+      "location": {"lat": 50.0617, "lon": 19.9373},
+      "place_id": "kawiarnia-rynek",
+      "source": {"type": "user_report", "name": "Zgłoszenie użytkownika (przykład)", "observed_at": "2026-08-20", "sample": true}
+    },
+    {
+      "id": "mly-2002-0",
+      "type": "surface",
+      "attrs": {"value": "asphalt"},
+      "location": {"lat": 50.05102, "lon": 19.94402},
+      "confidence": 0.9,
+      "source": {"type": "ai_detection", "name": "Mapillary 2002 (przykład, detekcja: vlm)", "license": "CC-BY-SA 4.0", "observed_at": "2025-09-01", "sample": true}
+    }
+  ]
+}
