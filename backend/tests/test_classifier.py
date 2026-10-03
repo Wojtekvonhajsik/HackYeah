@@ -54,7 +54,7 @@ def test_unknown_feature_prevents_no_known_barriers():
     obs = [make_obs("e", "entrance", {"width_cm": 100}, place_id="p")]  # próg nieznany
     result = assess(group_observations(obs), WHEELCHAIR, TODAY, required={FeatureType.ENTRANCE})
     assert result.summary == Summary.INCOMPLETE_DATA
-    assert "próg w wejściu" in result.missing
+    assert result.missing == ["próg w wejściu"]  # bez ogólnego "wejście" - wiemy, czego konkretnie brakuje
 
 
 def test_complete_good_data_gives_no_known_barriers():

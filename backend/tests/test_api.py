@@ -142,3 +142,42 @@ def test_vote_errors():
         "voter_id": "d", "value": "confirm", "correction_attrs": {"kind": "lowered"},
     })
     assert resp.status_code == 400
+
+
+def test_real_place_does_not_mix_in_sample_data(monkeypatch):
+    # miejsce z OSM leży dokładnie przy przykładowej kawiarni
+    monkeypatch.setattr(main.osm, "search_places", lambda q: NOMINATIM_RESULT)
+    monkeypatch.setattr(main.osm, "fetch_place_observations", lambda *a: [])
+    client.get("/places/search", params={"q": "kawiarnia"})
+    body = client.post("/places/osm-node-123/assessment", json={"preset": "step_free_strict", **TODAY}).json()
+    assert body["contains_sample_data"] is False
+    assert body["features"] == []
+
+
+def _scan_images(lat, lon, radius_m, limit):
+    from datetime import date
+
+    from bezbarier.detection import ImageRef
+
+    return [ImageRef(id="m1", provider="mapillary", location={"lat": 50.05095, "lon": 19.944},
+                     heading=0, captured_at=date(2025, 7, 1))]
+
+
+def test_scan_place(monkeypatch):
+    monkeypatch.setattr(main.mapillary, "images_near", _scan_images)
+    resp = client.post("/places/muzeum-kazimierz/scan")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["images_analyzed"] == 1
+    assert {o["type"] for o in body["observations"]} == {"kerb", "surface"}
+    # drugi skan nie analizuje tego samego zdjęcia
+    assert client.post("/places/muzeum-kazimierz/scan").json()["images_skipped"] == 1
+    assessment = client.post("/places/muzeum-kazimierz/assessment", json={"preset": "step_free_strict", **TODAY}).json()
+    assert any(f["type"] == "kerb" for f in assessment["features"])
+
+
+def test_scan_without_token(monkeypatch):
+    monkeypatch.delenv("MAPILLARY_TOKEN", raising=False)
+    resp = client.post("/places/muzeum-kazimierz/scan")
+    assert resp.status_code == 400
+    assert "MAPILLARY_TOKEN" in resp.json()["detail"]

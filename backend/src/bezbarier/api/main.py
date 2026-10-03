@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -27,10 +28,15 @@ from ..classification import (
     preset_catalog,
 )
 from ..detection import ImageRef, detections_to_observations, get_detector
-from ..sources import osm
+from ..scan import ScanResult, scan_images
+from ..sources import mapillary, osm
 from ..storage import InMemoryRepository, Place, Vote, VoteValue
 
-SAMPLE_DATA = Path(__file__).resolve().parents[3] / "data" / "sample_observations.json"
+BACKEND_DIR = Path(__file__).resolve().parents[3]
+SAMPLE_DATA = BACKEND_DIR / "data" / "sample_observations.json"
+
+# Klucze (MAPILLARY_TOKEN, GEMINI_API_KEY, DETECTOR...) z backend/.env - plik jest w .gitignore
+load_dotenv(BACKEND_DIR / ".env")
 
 app = FastAPI(title="Kraków bez barier - klasyfikacja barier")
 app.add_middleware(
@@ -157,6 +163,28 @@ def _load_place_data(place: Place) -> list[str]:
         return ["Nie udało się pobrać danych z OpenStreetMap - pokazujemy tylko dane zapisane wcześniej."]
     repo.mark_loaded(place.id)
     return []
+
+
+@app.post("/places/{place_id}/scan")
+def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> ScanResult:
+    """Pobiera zdjęcia z Mapillary wokół miejsca, wykrywa na nich cechy i zapisuje je jako obserwacje AI.
+
+    Każde zdjęcie jest analizowane tylko raz. Po skanie wywołaj /assessment, żeby zobaczyć ocenę.
+    """
+    if place_id not in repo.places:
+        raise HTTPException(status_code=404, detail=f"Nie ma miejsca {place_id}")
+    if not 1 <= max_images <= 20:
+        raise HTTPException(status_code=400, detail="max_images musi być w zakresie 1-20")
+    place = repo.places[place_id]
+    try:
+        images = mapillary.images_near(place.location.lat, place.location.lon, radius_m=radius_m, limit=50)
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail="Brak MAPILLARY_TOKEN - ustaw go w backend/.env") from e
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=503, detail="Mapillary jest niedostępne, spróbuj później") from e
+    result = scan_images(place_id, place.location, images, get_detector(), repo.analyzed_images, max_images)
+    repo.add_observations(result.observations)
+    return result
 
 
 @app.post("/observations/analyze")
