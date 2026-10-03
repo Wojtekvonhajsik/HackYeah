@@ -74,7 +74,12 @@ głosy = (potwierdzenia + 1) / (potwierdzenia + zaprzeczenia + 1)
 | Mapillary | zdjęcia ulic do detekcji AI | CC-BY-SA 4.0 | `sources/mapillary.py` |
 | GUS - Bank Danych Lokalnych | statystyki miasta: osoby z niepełnosprawnościami (NSP 2021), osoby w wieku poprodukcyjnym, obiekty noclegowe z windą / pochylnią / drzwiami automatycznymi | CC BY 4.0 | `GET /stats/city` (`sources/gus.py`), pamięć 12 h, przy niedostępności kopia `data/gus_<jednostka>.json` |
 
-Dane GUS są zagregowane dla gminy, więc nie wpływają na ocenę pojedynczego miejsca - pokazują skalę potrzeb
+Analiza bezpieczeństwa (pierwsza sekcja oceny miejsca, `safety`): wskaźniki GUS dla miasta na tle Polski - wypadki
+drogowe i ofiary śmiertelne na 100 tys. mieszkańców (P1754/P2423), przestępstwa na 1000 mieszkańców (P4633) - plus
+przejścia dla pieszych w okolicy z OSM (sygnalizacja świetlna/dźwiękowa) i wskazówki zależne od profilu. Wypadki >= 1,5x
+średniej krajowej = poziom „podwyższony” (Kraków 2025: 116 vs 56 na 100 tys.).
+
+Dane GUS są zagregowane dla gminy, więc nie zmieniają werdyktów barier pojedynczego miejsca - pokazują skalę potrzeb
 (kontekst dla użytkownika i miasta) oraz stan bazy noclegowej (argument dla właścicieli obiektów). Inne miasto:
 `GUS_UNIT_ID` = identyfikator jednostki w BDL.
 | Zgłoszenia użytkowników | potwierdzenia, poprawki | - | `POST /observations/{id}/votes` |

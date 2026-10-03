@@ -9,6 +9,7 @@ własna instancja albo cache. Mapowanie tagów: https://wiki.openstreetmap.org/w
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -16,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeout
 from datetime import date, datetime
 from typing import Any
+from xml.etree import ElementTree
 
 import httpx
 
@@ -28,8 +30,10 @@ PUBLIC_OVERPASS_URLS = [
     "https://overpass.private.coffee/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
-# Łączny limit czasu na zapytanie (wszystkie serwery równolegle)
-OVERPASS_TOTAL_BUDGET_S = 35
+# Ile czekamy na Overpass (wszystkie serwery równolegle), zanim spróbujemy głównego API OpenStreetMap
+OVERPASS_BUDGET_S = 12
+OSM_API_URL = "https://api.openstreetmap.org/api/0.6"
+logger = logging.getLogger(__name__)
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup"
 USER_AGENT = "KrakowBezBarier/0.1 (HackYeah prototype)"
@@ -260,11 +264,21 @@ def parse_overpass(
 
 # ---------- zapytania sieciowe ----------
 
-def overpass_query(lat: float, lon: float, radius_m: float, place_osm: tuple[str, int] | None = None) -> str:
-    # Prostokąt zamiast okręgu (around) - dla Overpass dużo tańszy, więc odpowiedź przychodzi szybciej
+class OsmSourceError(httpx.HTTPError):
+    """Serwer odpowiedział, ale nie danymi (np. strona błędu albo przerwane zapytanie Overpass)."""
+
+
+def _bbox(lat: float, lon: float, radius_m: float) -> tuple[float, float, float, float]:
+    """(południe, zachód, północ, wschód) prostokąta ok. radius_m w każdą stronę."""
     d_lat = radius_m / 111_320
     d_lon = radius_m / (111_320 * math.cos(math.radians(lat)))
-    bbox = f"({lat - d_lat:.6f},{lon - d_lon:.6f},{lat + d_lat:.6f},{lon + d_lon:.6f})"
+    return lat - d_lat, lon - d_lon, lat + d_lat, lon + d_lon
+
+
+def overpass_query(lat: float, lon: float, radius_m: float, place_osm: tuple[str, int] | None = None) -> str:
+    # Prostokąt zamiast okręgu (around) - dla Overpass dużo tańszy, więc odpowiedź przychodzi szybciej
+    s, w, n, e = _bbox(lat, lon, radius_m)
+    bbox = f"({s:.6f},{w:.6f},{n:.6f},{e:.6f})"
     place = f"{place_osm[0]}(id:{place_osm[1]});" if place_osm else ""
     return f"""[out:json][timeout:25];
 (
@@ -284,7 +298,96 @@ def _post_overpass(url: str, query: str, timeout_s: float) -> dict[str, Any]:
     timeout = httpx.Timeout(timeout_s, connect=min(8, timeout_s))
     resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=timeout)
     resp.raise_for_status()
-    return resp.json()
+    try:
+        data = resp.json()
+    except ValueError as e:  # przeciążony serwer potrafi odesłać stronę HTML z kodem 200
+        raise OsmSourceError("Overpass zwrócił niepoprawną odpowiedź") from e
+    remark = str(data.get("remark", ""))
+    if not data.get("elements") and ("error" in remark or "timed out" in remark):
+        raise OsmSourceError(f"Overpass przerwał zapytanie: {remark[:80]}")
+    return data
+
+
+def _race_overpass(query: str, budget_s: float) -> dict[str, Any]:
+    """Pyta wszystkie serwery Overpass naraz i bierze pierwszą udaną odpowiedź."""
+    urls = [os.environ["OVERPASS_URL"]] if os.environ.get("OVERPASS_URL") else PUBLIC_OVERPASS_URLS
+    pool = ThreadPoolExecutor(max_workers=len(urls), thread_name_prefix="overpass")
+    futures = [pool.submit(_post_overpass, url, query, budget_s) for url in urls]
+    last_error: httpx.HTTPError | None = None
+    try:
+        for future in as_completed(futures, timeout=budget_s):
+            try:
+                return future.result()
+            except httpx.HTTPError as e:
+                last_error = e
+    except FuturesTimeout:
+        raise last_error or httpx.TimeoutException("Przekroczony czas pobierania z Overpass") from None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)  # nie czekamy na wolniejsze serwery
+    assert last_error is not None
+    raise last_error
+
+
+def _relevant_node(tags: dict[str, str]) -> bool:
+    return (
+        tags.get("barrier") == "kerb"
+        or "kerb" in tags
+        or "entrance" in tags
+        or tags.get("highway") in ("crossing", "elevator")
+        or tags.get("amenity") in ("bench", "toilets")
+    )
+
+
+def fetch_osm_api(lat: float, lon: float, radius_m: float, place_osm: tuple[str, int] | None) -> dict[str, Any]:
+    """Zapas, gdy Overpass nie odpowiada: główne API OpenStreetMap (jedno małe zapytanie o prostokąt ~60 m).
+
+    Zwraca dane w tym samym formacie co Overpass, więc dalsze przetwarzanie się nie zmienia.
+    API OSM służy głównie do edycji - używamy go tylko awaryjnie, dla jednego miejsca naraz.
+    """
+    s, w, n, e = _bbox(lat, lon, radius_m)
+    headers = {"User-Agent": USER_AGENT}
+    resp = httpx.get(OSM_API_URL + "/map", params={"bbox": f"{w:.6f},{s:.6f},{e:.6f},{n:.6f}"}, headers=headers, timeout=15)
+    resp.raise_for_status()
+    try:
+        root = ElementTree.fromstring(resp.content)
+    except ElementTree.ParseError as err:
+        raise OsmSourceError("API OpenStreetMap zwróciło niepoprawną odpowiedź") from err
+
+    def tags_of(el: ElementTree.Element) -> dict[str, str]:
+        return {t.get("k"): t.get("v") for t in el.findall("tag")}
+
+    coords: dict[int, tuple[float, float]] = {}
+    elements: list[dict[str, Any]] = []
+    for node in root.iter("node"):
+        node_id = int(node.get("id"))
+        coords[node_id] = (float(node.get("lat")), float(node.get("lon")))
+        tags = tags_of(node)
+        if tags and (_relevant_node(tags) or place_osm == ("node", node_id)):
+            elements.append({
+                "type": "node", "id": node_id, "lat": coords[node_id][0], "lon": coords[node_id][1],
+                "timestamp": node.get("timestamp"), "tags": tags,
+            })
+    for way in root.iter("way"):
+        way_id = int(way.get("id"))
+        tags = tags_of(way)
+        if not (place_osm == ("way", way_id) or re.match(FOOTWAY_RE, tags.get("highway", ""))):
+            continue
+        points = [coords[int(nd.get("ref"))] for nd in way.findall("nd") if int(nd.get("ref")) in coords]
+        if not points:
+            continue
+        center = {"lat": sum(p[0] for p in points) / len(points), "lon": sum(p[1] for p in points) / len(points)}
+        elements.append({"type": "way", "id": way_id, "center": center, "timestamp": way.get("timestamp"), "tags": tags})
+    if place_osm and place_osm[0] == "relation":
+        # relacja (np. duży kompleks) - tagi z osobnego zapytania, położenie z wyszukiwarki
+        rel = httpx.get(f"{OSM_API_URL}/relation/{place_osm[1]}", headers=headers, timeout=15)
+        rel.raise_for_status()
+        rel_el = ElementTree.fromstring(rel.content).find("relation")
+        if rel_el is not None:
+            elements.append({
+                "type": "relation", "id": place_osm[1], "center": {"lat": lat, "lon": lon},
+                "timestamp": rel_el.get("timestamp"), "tags": tags_of(rel_el),
+            })
+    return {"elements": elements}
 
 
 def fetch_place_observations(
@@ -294,32 +397,17 @@ def fetch_place_observations(
     radius_m: float = 30,
     today: date | None = None,
 ) -> list[Observation]:
-    """Pyta wszystkie serwery Overpass naraz i bierze pierwszą udaną odpowiedź.
-
-    Publiczne serwery bywają przeciążone na zmianę - równoległe zapytanie skraca czekanie do czasu
-    najszybszego z nich, a łączny limit OVERPASS_TOTAL_BUDGET_S chroni przed minutowym czekaniem.
-    """
+    """Najpierw Overpass (równolegle z kilku serwerów), a gdy nie odpowie w OVERPASS_BUDGET_S -
+    główne API OpenStreetMap. Publiczne serwery Overpass bywają przeciążone i potrafią nie odpowiadać
+    całymi godzinami (tak było np. dla Urzędu Miasta Krakowa)."""
     today = today or date.today()
     query = overpass_query(location.lat, location.lon, radius_m, place_osm)
-    urls = [os.environ["OVERPASS_URL"]] if os.environ.get("OVERPASS_URL") else PUBLIC_OVERPASS_URLS
-    budget = OVERPASS_TOTAL_BUDGET_S
-    pool = ThreadPoolExecutor(max_workers=len(urls), thread_name_prefix="overpass")
-    futures = [pool.submit(_post_overpass, url, query, budget) for url in urls]
-    last_error: httpx.HTTPError | None = None
     try:
-        for future in as_completed(futures, timeout=budget):
-            try:
-                data = future.result()
-            except httpx.HTTPError as e:
-                last_error = e
-                continue
-            return parse_overpass(data, today, place_id, location, place_osm)
-    except FuturesTimeout:
-        raise last_error or httpx.TimeoutException("Przekroczony łączny czas pobierania z Overpass") from None
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)  # nie czekamy na wolniejsze serwery
-    assert last_error is not None
-    raise last_error
+        data = _race_overpass(query, OVERPASS_BUDGET_S)
+    except httpx.HTTPError as overpass_error:
+        logger.warning("Overpass nieudany dla %s (%r) - próbuję API OpenStreetMap", place_id, overpass_error)
+        data = fetch_osm_api(location.lat, location.lon, radius_m, place_osm)
+    return parse_overpass(data, today, place_id, location, place_osm)
 
 
 def describe_error(e: httpx.HTTPError) -> str:
@@ -330,6 +418,8 @@ def describe_error(e: httpx.HTTPError) -> str:
         return f"błąd serwera HTTP {e.response.status_code}"
     if isinstance(e, httpx.TimeoutException):
         return "serwer nie odpowiedział na czas"
+    if isinstance(e, OsmSourceError):
+        return "serwer zwrócił błąd"
     return "brak połączenia"
 
 

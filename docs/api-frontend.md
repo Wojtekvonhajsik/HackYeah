@@ -55,6 +55,7 @@ Body: `{"preset": "step_free_strict"}`. Odpowiedź wraca od razu. Jeśli dane z 
 | `missing[]` | czego nie wiemy - pokaż wyraźnie |
 | `warnings[]` | np. niedostępne źródło danych - pokaż jako komunikat |
 | `pending_sources[]` | źródła wciąż pobierane w tle - odpytuj ponownie |
+| `safety` | **analiza bezpieczeństwa - pokaż jako pierwszą**: `level` (`elevated` / `typical` / `lower` / `unknown`), `headline`, `facts[]`, `tips[]` (zależne od profilu), `crossings` (przejścia w pobliżu: z sygnalizacją / dźwiękową), `city` (wskaźniki GUS vs Polska), `scope_note` |
 
 Informacja pochodzi z analizy zdjęcia przez AI, gdy `evidence[].source.type == "ai_detection"` - oznacz ją wyraźnie (np. „AI”).
 

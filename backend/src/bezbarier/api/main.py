@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from ..classification import (
     Assessment,
@@ -35,8 +35,10 @@ from ..classification import (
     needs_from_preset,
     preset_catalog,
 )
+from ..classification.describe import describe
 from ..classification.report_schema import validate_report
 from ..detection import Detector, ImageRef, detections_to_observations, get_detector
+from ..safety import PlaceSafety, assess_safety
 from ..scan import ScanResult, scan_images
 from ..sources import gus, mapillary, osm
 from ..storage import PLACE_RADIUS_M, Place, SqliteRepository, Vote, VoteValue
@@ -236,18 +238,43 @@ def _get_place(place_id: str) -> Place:
     return repo.places[place_id]
 
 
+class PlaceAssessment(Assessment):
+    """Ocena miejsca + analiza bezpieczeństwa (pokazywana jako pierwsza)."""
+
+    safety: PlaceSafety | None = None
+
+    @computed_field
+    @property
+    def text(self) -> str:
+        lines = []
+        if self.safety is not None:
+            lines.append(f"Bezpieczeństwo: {self.safety.headline}")
+            lines += [f"{fact}." for fact in self.safety.facts]
+            lines += self.safety.tips
+        return "\n".join([*lines, describe(self)])
+
+
+def _city_safety():
+    try:
+        return gus.city_safety()
+    except (httpx.HTTPError, ValueError, KeyError):
+        return None  # bez GUS ocena działa dalej, sekcja bezpieczeństwa mówi "brak danych"
+
+
 @app.post("/places/{place_id}/assessment")
-def place_assessment(place_id: str, req: ProfileRequest, wait: bool = False) -> Assessment:
+def place_assessment(place_id: str, req: ProfileRequest, wait: bool = False) -> PlaceAssessment:
     """Ocena wraca od razu. Jeśli dane z OSM jeszcze się pobierają, pending_sources = ["OpenStreetMap"] -
     frontend pokazuje wynik i odpytuje ponownie co kilka sekund. wait=true czeka na OSM (skrypty)."""
     needs = _resolve_needs(req)
     state = _ensure_osm(_get_place(place_id), req.today or date.today(), wait_s=OSM_WAIT_S if wait else 0)
     warnings = state.warnings + ([OSM_PENDING_MESSAGE] if state.pending else [])
-    features = group_observations(repo.observations_for_place(place_id))
-    result = assess(features, needs, req.today, default_required(needs, "place"), warnings, place_id=place_id)
+    observations = repo.observations_for_place(place_id)
+    result = assess(group_observations(observations), needs, req.today, default_required(needs, "place"), warnings,
+                    place_id=place_id)
     result.warnings.extend(state.notes)  # informacja dla użytkownika, ale nie obniża oceny
     result.pending_sources = ["OpenStreetMap"] if state.pending else []
-    return result
+    safety = assess_safety(_city_safety(), observations, needs)
+    return PlaceAssessment.model_validate({**result.model_dump(exclude={"text"}), "safety": safety})
 
 
 # ---------- pobieranie danych z OSM w tle ----------

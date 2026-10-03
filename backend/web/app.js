@@ -315,7 +315,6 @@ function placeItem(place) {
 // ---------- dane GUS ----------
 
 let cityStats = null;
-const numberPl = new Intl.NumberFormat("pl-PL");
 const fmtPct = (pct) => `${String(pct).replace(".", ",")}%`;
 
 async function loadCityStats() {
@@ -323,30 +322,7 @@ async function loadCityStats() {
   return cityStats;
 }
 
-async function renderCityStats() {
-  const box = $("#city-stats");
-  try {
-    const stats = await loadCityStats();
-    const pick = (key) => stats.items.find((i) => i.key === key);
-    const tiles = [
-      [pick("disabled"), (i) => `${numberPl.format(i.value)}`, (i) => `osób z niepełnosprawnościami (${fmtPct(i.share_pct)} mieszkańców, spis ${i.year})`],
-      [pick("post_working_age"), (i) => `${numberPl.format(i.value)}`, (i) => `osób w wieku poprodukcyjnym (${fmtPct(i.share_pct)}, ${i.year})`],
-      [pick("lodging_ramp"), (i) => fmtPct(i.share_pct), (i) => `obiektów noclegowych ma pochylnię (${i.year})`],
-    ].filter(([item]) => item);
-    box.innerHTML = `
-      <h2 class="section-title">Dla kogo to jest</h2>
-      <ul class="stat-grid">${tiles.map(([item, big, small]) => `
-        <li class="stat"><strong>${esc(big(item))}</strong><span>${esc(small(item))}</span></li>`).join("")}
-      </ul>
-      <p class="source-note">Kraków. Źródło: <a href="${esc(stats.url)}" target="_blank" rel="noopener">${esc(stats.source)}</a>,
-        licencja ${esc(stats.license)}${stats.from_snapshot ? `, kopia z ${fmtDate(stats.retrieved_at)} (GUS chwilowo niedostępny)` : ""}.</p>`;
-  } catch {
-    box.innerHTML = ""; // kontekst - bez niego aplikacja działa normalnie
-  }
-}
-
 async function showSearch() {
-  renderCityStats();
   const recent = store.get("recent") || [];
   const title = document.querySelector("#view-search .section-title");
   const list = $("#recent");
@@ -583,6 +559,34 @@ function lodgingContext() {
 
 const shortLodging = (key) => ({ lodging_elevator: "windę", lodging_ramp: "pochylnię", lodging_auto_door: "drzwi automatyczne" })[key];
 
+// Bezpieczeństwo - najwyższy priorytet, więc pierwsza karta miejsca
+const SAFETY_LEVEL = {
+  elevated: { badge: "Uwaga", symbol: "!", verdict: "uncertain" },
+  typical: { badge: "Typowo", symbol: "i", verdict: "unknown" },
+  lower: { badge: "Spokojniej", symbol: "✓", verdict: "ok" },
+  unknown: { badge: "Brak danych", symbol: "–", verdict: "unknown" },
+};
+
+function safetyCard(safety) {
+  if (!safety) return "";
+  const level = SAFETY_LEVEL[safety.level];
+  const snapshot = safety.city?.from_snapshot ? ` Dane GUS z kopii z ${fmtDate(safety.city.retrieved_at)}.` : "";
+  return `<section class="card safety" data-level="${esc(safety.level)}" aria-labelledby="safety-title">
+    <div class="feature-head">
+      <span class="verdict-icon v-${level.verdict}" aria-hidden="true">${level.symbol}</span>
+      <h2 id="safety-title">Bezpieczeństwo</h2>
+      <span class="badge v-${level.verdict}">${level.badge}</span>
+    </div>
+    <p>${esc(safety.headline)}</p>
+    ${safety.tips.length ? `<ul class="safety-tips">${safety.tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+    <details class="evidence">
+      <summary>Dane o bezpieczeństwie</summary>
+      <ul class="reasons">${safety.facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
+      <p class="source-note">${esc(safety.scope_note)}${esc(snapshot)} Licencja GUS: CC BY 4.0.</p>
+    </details>
+  </section>`;
+}
+
 function renderPlace() {
   const { place, assessment: a } = current;
   const summary = SUMMARY[a.summary];
@@ -599,6 +603,8 @@ function renderPlace() {
     ${pending ? `<p class="notice info loading"><span class="spinner" aria-hidden="true"></span>Dociągamy dane z OpenStreetMap - ocena uzupełni się sama.</p>` : ""}
     ${warnings.map((w) => `<p class="notice warn" role="alert">${esc(w)}</p>`).join("")}
 
+    ${safetyCard(a.safety)}
+
     <section class="card summary" data-summary="${esc(a.summary)}" aria-labelledby="summary-title">
       <h2 id="summary-title"><span class="verdict-icon v-${summary.verdict}" aria-hidden="true">${VERDICT[summary.verdict].symbol}</span>${esc(summary.title)}</h2>
       <ul class="chips">
@@ -610,7 +616,6 @@ function renderPlace() {
       <div class="summary-actions">
         <button class="btn small" type="button" data-action="speak" aria-pressed="false"><span aria-hidden="true">🔊</span> Odczytaj</button>
         <button class="btn small" type="button" data-action="share">Udostępnij</button>
-        <a class="btn small" href="#/profil" aria-label="Zmień profil: ${esc(profileLabel())}">Profil</a>
       </div>
     </section>
 
