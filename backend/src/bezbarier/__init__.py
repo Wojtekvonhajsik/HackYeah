@@ -1,0 +1,1 @@
+"""Kraków bez barier - backend."""
