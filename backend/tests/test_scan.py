@@ -12,8 +12,13 @@ PLACE = GeoPoint(lat=50.0617, lon=19.9373)
 SOUTH_OF_PLACE = GeoPoint(lat=50.06155, lon=19.9373)  # ~17 m na południe
 
 
-def image(img_id: str, location: GeoPoint = SOUTH_OF_PLACE, heading: float | None = 0) -> ImageRef:
-    return ImageRef(id=img_id, provider="mapillary", location=location, heading=heading, captured_at=date(2025, 7, 1))
+def image(
+    img_id: str,
+    location: GeoPoint = SOUTH_OF_PLACE,
+    heading: float | None = 0,
+    captured_at: date = date(2025, 7, 1),
+) -> ImageRef:
+    return ImageRef(id=img_id, provider="mapillary", location=location, heading=heading, captured_at=captured_at)
 
 
 class FakeDetector:
@@ -63,6 +68,34 @@ def test_images_analyzed_once_and_nearest_first():
     second = scan_images("p", PLACE, [far, image("near")], detector, analyzed, max_images=2)
     assert detector.calls == ["near", "far"]
     assert (first.images_analyzed, second.images_analyzed, second.images_skipped) == (1, 1, 1)
+
+
+def test_recent_images_preferred_over_nearer_old_ones():
+    old_but_near = image("old", captured_at=date(2016, 8, 27))
+    recent_but_far = image("recent", location=GeoPoint(lat=50.0614, lon=19.9373), captured_at=date(2025, 7, 1))
+    detector = FakeDetector()
+    result = scan_images("p", PLACE, [old_but_near, recent_but_far], detector, set(), max_images=1, today=date(2026, 10, 3))
+    assert detector.calls == ["recent"]
+    assert result.notes == []
+
+
+def test_old_images_used_only_when_no_recent_with_note():
+    detector = FakeDetector()
+    result = scan_images(
+        "p", PLACE, [image("old", captured_at=date(2016, 8, 27))], detector, set(), today=date(2026, 10, 3)
+    )
+    assert detector.calls == ["old"]
+    assert "starszych" in result.notes[0]
+
+
+def test_next_scan_takes_next_images():
+    analyzed: set[str] = set()
+    images = [image("a"), image("b", location=GeoPoint(lat=50.0615, lon=19.9373))]
+    detector = FakeDetector()
+    scan_images("p", PLACE, images, detector, analyzed, max_images=1)
+    result = scan_images("p", PLACE, images, detector, analyzed, max_images=1)
+    assert detector.calls == ["a", "b"]
+    assert (result.images_analyzed, result.images_skipped) == (1, 1)
 
 
 def test_detector_error_does_not_stop_scan():

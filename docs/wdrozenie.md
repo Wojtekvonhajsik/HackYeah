@@ -61,6 +61,8 @@ Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - 
 
 - **OSM** - pobierane przy pierwszej ocenie miejsca; data informacji = `check_date` albo ostatnia edycja w OSM.
 - **Zdjęcia** - skan na żądanie (`/places/{id}/scan`); data informacji = data wykonania zdjęcia, nie analizy.
+  Skan wybiera zdjęcia z ostatnich 3 lat (starsze tylko, gdy nowszych nie ma - z adnotacją w `notes`),
+  a każdy kolejny skan tego samego miejsca analizuje następne, jeszcze nieprzeanalizowane zdjęcia.
 - **Użytkownicy** - każde potwierdzenie odświeża datę informacji; zaprzeczenia obniżają wiarygodność.
 - Niedostępne źródło nie blokuje aplikacji: odpowiedź zawiera ostrzeżenie w `warnings`, a ocena opiera się na danych już zapisanych.
 

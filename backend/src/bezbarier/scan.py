@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from datetime import date
 
 from pydantic import BaseModel
 
@@ -14,14 +15,18 @@ from .detection import Detector, ImageRef, detections_to_observations
 ENTRANCE_MAX_DISTANCE_M = 25
 ENTRANCE_MAX_ANGLE_DEG = 45
 
+# Zdjęcia starsze niż to analizujemy tylko, gdy nowszych nie ma
+MAX_IMAGE_AGE_DAYS = 3 * 365
+
 
 class ScanResult(BaseModel):
     images_found: int
     radius_m: float | None = None  # promień, w którym ostatecznie szukano zdjęć
     images_analyzed: int
-    images_skipped: int  # już przeanalizowane wcześniej
+    images_skipped: int  # już przeanalizowane wcześniej (pomijane)
     observations: list[Observation]
     errors: list[str]
+    notes: list[str] = []  # np. "brak nowych zdjęć - użyto starszych"
 
 
 def bearing_deg(a: GeoPoint, b: GeoPoint) -> float:
@@ -40,8 +45,33 @@ def faces(image: ImageRef, target: GeoPoint) -> bool:
     return diff <= ENTRANCE_MAX_ANGLE_DEG
 
 
-def nearest_images(images: list[ImageRef], target: GeoPoint, limit: int) -> list[ImageRef]:
-    return sorted(images, key=lambda im: haversine_m(im.location, target))[:limit]
+def select_images(
+    images: list[ImageRef],
+    target: GeoPoint,
+    limit: int,
+    today: date,
+    already_analyzed: set[str],
+) -> tuple[list[ImageRef], list[str]]:
+    """Najbliższe jeszcze nieanalizowane zdjęcia, preferując nowe (nie starsze niż MAX_IMAGE_AGE_DAYS).
+
+    Stare zdjęcia dawałyby od razu "nieaktualne" obserwacje - płacimy za nie tylko, gdy nowszych nie ma.
+    """
+    fresh = [im for im in images if _key(im) not in already_analyzed]
+    recent = [im for im in fresh if (today - im.captured_at).days <= MAX_IMAGE_AGE_DAYS]
+    notes = []
+    pool = recent
+    if not recent and fresh:
+        pool = fresh
+        notes.append(
+            f"Brak nowych zdjęć z ostatnich {MAX_IMAGE_AGE_DAYS // 365} lat - użyto starszych, "
+            "ich wyniki będą oznaczone jako nieaktualne."
+        )
+    selected = sorted(pool, key=lambda im: haversine_m(im.location, target))[:limit]
+    return selected, notes
+
+
+def _key(image: ImageRef) -> str:
+    return f"{image.provider}-{image.id}"
 
 
 def scan_images(
@@ -51,22 +81,22 @@ def scan_images(
     detector: Detector,
     already_analyzed: set[str],
     max_images: int = 5,
+    today: date | None = None,
 ) -> ScanResult:
-    selected = nearest_images(images, place_location, max_images)
+    """Każdy skan analizuje do max_images NOWYCH zdjęć - kolejny skan tego samego miejsca bierze następne."""
+    today = today or date.today()
+    skipped = sum(_key(im) in already_analyzed for im in images)
+    selected, notes = select_images(images, place_location, max_images, today, already_analyzed)
     observations: list[Observation] = []
     errors: list[str] = []
-    analyzed = skipped = 0
+    analyzed = 0
     for image in selected:
-        key = f"{image.provider}-{image.id}"
-        if key in already_analyzed:
-            skipped += 1
-            continue
         try:
             detections = detector.detect(image)
         except Exception as e:  # błąd jednego zdjęcia (limit API, timeout) nie przerywa skanu
             errors.append(f"zdjęcie {image.id}: {type(e).__name__}: {e}")
             continue
-        already_analyzed.add(key)
+        already_analyzed.add(_key(image))
         analyzed += 1
         for obs in detections_to_observations(
             image, detections, detector.model_name, sample=detector.model_name.startswith("mock")
@@ -82,4 +112,5 @@ def scan_images(
         images_skipped=skipped,
         observations=observations,
         errors=errors,
+        notes=notes,
     )
