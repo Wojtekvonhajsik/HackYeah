@@ -181,3 +181,26 @@ def test_scan_without_token(monkeypatch):
     resp = client.post("/places/muzeum-kazimierz/scan")
     assert resp.status_code == 400
     assert "MAPILLARY_TOKEN" in resp.json()["detail"]
+
+
+def test_missing_detector_library_gives_clear_error(monkeypatch):
+    def broken():
+        raise ImportError("No module named 'google'")
+
+    monkeypatch.setenv("DETECTOR", "gemini")
+    monkeypatch.setattr(main, "get_detector", broken)
+    monkeypatch.setattr(main.mapillary, "images_near", _scan_images)
+    resp = client.post("/places/muzeum-kazimierz/scan")
+    assert resp.status_code == 500
+    assert 'pip install -e ".[gemini]"' in resp.json()["detail"]
+
+
+def test_missing_api_key_gives_clear_error(monkeypatch):
+    def no_key():
+        raise ValueError("No API key was provided.")
+
+    monkeypatch.setattr(main, "get_detector", no_key)
+    monkeypatch.setattr(main.mapillary, "images_near", _scan_images)
+    resp = client.post("/places/muzeum-kazimierz/scan")
+    assert resp.status_code == 400
+    assert "No API key" in resp.json()["detail"]

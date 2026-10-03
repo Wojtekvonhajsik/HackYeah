@@ -86,6 +86,7 @@ def test_vlm_mapping():
 
 
 def test_gemini_detector_request_and_parsing(monkeypatch):
+    pytest.importorskip("google.genai", reason='brak google-genai: pip install -e ".[gemini]"')
     from bezbarier.detection.gemini_vlm import GeminiVisionDetector
 
     captured = {}
