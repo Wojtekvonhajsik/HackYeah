@@ -346,10 +346,29 @@ async function showSearch() {
   }
 }
 
+// Pytanie zamiast nazwy miejsca ("gdzie zjem bez schodów") trafia od razu do asystenta.
+// (\s|$) zamiast \b - w JS \b nie działa przy polskich znakach (np. "pokaż").
+const QUESTION_START = /^(gdzie|jak|jaki|jaka|jakie|który|która|które|co|czy|polec\S*|szukam|chcę|chce|potrzebuj\S*|pokaż|znajdź)(\s|$)/i;
+
+function looksLikeQuestion(query) {
+  return query.endsWith("?") || QUESTION_START.test(query); // długie nazwy ("Teatr im. J. Słowackiego") zostają wyszukiwaniem
+}
+
+let pendingQuestion = null;
+
+function askAssistant(question) {
+  pendingQuestion = question;
+  if (location.hash === "#/asystent") showAssistant(); else location.hash = "#/asystent";
+}
+
 async function onSearchSubmit(event) {
   event.preventDefault();
   const query = $("#search-input").value.trim();
   if (!query) return;
+  if (looksLikeQuestion(query)) {
+    askAssistant(query);
+    return;
+  }
   const box = $("#search-results");
   box.innerHTML = loadingHtml("Szukam…");
   announce("Szukam…");
@@ -357,8 +376,9 @@ async function onSearchSubmit(event) {
     const results = await api(`/places/search?q=${encodeURIComponent(query)}`);
     box.innerHTML = results.length
       ? `<h2 class="section-title">Wyniki</h2><ul class="place-list">${results.map(placeItem).join("")}</ul>`
-      : `<p class="notice info">Nie znaleźliśmy „${esc(query)}” w Krakowie. Spróbuj innej nazwy.</p>`;
-    announce(results.length ? `Znaleziono miejsc: ${results.length}.` : "Brak wyników.");
+      : `<p class="notice info">Nie znaleźliśmy miejsca o nazwie „${esc(query)}” w Krakowie.</p>
+         <button class="btn primary block" type="button" data-ask="${esc(query)}">Zapytaj asystenta: „${esc(query)}”</button>`;
+    announce(results.length ? `Znaleziono miejsc: ${results.length}.` : "Brak wyników. Możesz zapytać asystenta.");
   } catch (error) {
     box.innerHTML = `<p class="notice warn" role="alert">${esc(error.message)}</p>`;
   }
@@ -390,6 +410,11 @@ function setupVoiceInput(micSelector, inputSelector, formSelector, prompt) {
 
 function showAssistant() {
   focusHeading("#assistant-title");
+  if (pendingQuestion) {
+    $("#assistant-input").value = pendingQuestion;
+    pendingQuestion = null;
+    $("#assistant-form").requestSubmit();
+  }
 }
 
 function assistantPlace(place, onClickAttr = "") {
@@ -999,6 +1024,10 @@ function init() {
   setupVoiceInput("#mic", "#search-input", "#search-form", "Słucham. Powiedz nazwę miejsca.");
   setupVoiceInput("#assistant-mic", "#assistant-input", "#assistant-form", "Słucham. Zadaj pytanie.");
   $("#assistant-form").addEventListener("submit", onAssistantSubmit);
+  $("#search-results").addEventListener("click", (event) => {
+    const ask = event.target.closest("[data-ask]");
+    if (ask) askAssistant(ask.dataset.ask);
+  });
   $("#view-assistant").addEventListener("click", (event) => {
     const example = event.target.closest("[data-question]");
     if (example) {
