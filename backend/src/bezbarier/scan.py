@@ -82,8 +82,13 @@ def scan_images(
     already_analyzed: set[str],
     max_images: int = 5,
     today: date | None = None,
+    link_beyond_m: float | None = None,
 ) -> ScanResult:
-    """Każdy skan analizuje do max_images NOWYCH zdjęć - kolejny skan tego samego miejsca bierze następne."""
+    """Każdy skan analizuje do max_images NOWYCH zdjęć - kolejny skan tego samego miejsca bierze następne.
+
+    link_beyond_m: obserwacje ze zdjęć dalszych niż tyle od miejsca dostają jego place_id - inaczej przy
+    powiększonym promieniu skanu wypadłyby poza otoczenie miejsca i nie trafiłyby do jego oceny.
+    """
     today = today or date.today()
     skipped = sum(_key(im) in already_analyzed for im in images)
     selected, notes = select_images(images, place_location, max_images, today, already_analyzed)
@@ -104,6 +109,8 @@ def scan_images(
             if obs.type == FeatureType.ENTRANCE:
                 if not faces(image, place_location):
                     continue  # wejście do innego budynku
+                obs = obs.model_copy(update={"place_id": place_id})
+            elif link_beyond_m is not None and haversine_m(image.location, place_location) > link_beyond_m:
                 obs = obs.model_copy(update={"place_id": place_id})
             observations.append(obs)
     return ScanResult(

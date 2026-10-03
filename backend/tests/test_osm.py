@@ -1,9 +1,11 @@
 from datetime import date
 
+import httpx
 import pytest
 from conftest import TODAY
 
 from bezbarier.classification import FeatureType, GeoPoint, SourceType
+from bezbarier.sources import osm
 from bezbarier.sources.osm import parse_incline_pct, parse_length_cm, parse_osm_date, parse_overpass
 
 PLACE = GeoPoint(lat=50.0617, lon=19.9373)
@@ -105,3 +107,26 @@ def test_tag_mapping():
     assert obs["osm-way-6-path_width"].attrs == {"width_cm": 200}
     assert obs["osm-way-7-steps"].type == FeatureType.STEPS
     assert obs["osm-way-7-steps"].attrs == {"count": 4, "handrail": True}
+
+
+def _response(status: int, body: dict | None = None) -> httpx.Response:
+    return httpx.Response(status, json=body or {}, request=httpx.Request("POST", "https://overpass.test"))
+
+
+def test_overpass_retries_after_rate_limit(monkeypatch):
+    responses = [_response(429), _response(200, OVERPASS)]
+    monkeypatch.setattr(osm.httpx, "post", lambda *a, **k: responses.pop(0))
+    monkeypatch.setattr(osm.time, "sleep", lambda s: None)
+    monkeypatch.setenv("OVERPASS_URL", "https://overpass.test")
+    obs = osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
+    assert len(obs) == 8
+    assert responses == []
+
+
+def test_overpass_gives_up_with_readable_reason(monkeypatch):
+    monkeypatch.setattr(osm.httpx, "post", lambda *a, **k: _response(429))
+    monkeypatch.setattr(osm.time, "sleep", lambda s: None)
+    monkeypatch.setenv("OVERPASS_URL", "https://overpass.test")
+    with pytest.raises(httpx.HTTPStatusError) as exc:
+        osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
+    assert osm.describe_error(exc.value) == "serwer ogranicza liczbę zapytań"

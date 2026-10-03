@@ -59,3 +59,19 @@ def test_amenities_of_different_kind_not_merged():
 def test_date_parsing_from_json():
     obs = make_obs("x", "kerb", {}, observed_at=date(2025, 6, 12))
     assert obs.source.observed_at.year == 2025
+
+
+def test_surface_grouped_across_place_ids():
+    obs = [
+        make_obs("osm", "surface", {"value": "sett"}, lat=50.06165),
+        make_obs("ai", "surface", {"value": "sett"}, lat=50.06166, place_id="p"),
+    ]
+    assert len(group_observations(obs)) == 1
+
+
+def test_entrances_of_different_places_not_merged():
+    obs = [
+        make_obs("e1", "entrance", {}, place_id="a"),
+        make_obs("e2", "entrance", {}, place_id="b"),
+    ]
+    assert len(group_observations(obs)) == 2

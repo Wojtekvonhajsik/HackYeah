@@ -98,6 +98,14 @@ def test_next_scan_takes_next_images():
     assert (result.images_analyzed, result.images_skipped) == (1, 1)
 
 
+def test_far_images_linked_to_place():
+    far = image("far", location=GeoPoint(lat=50.0613, lon=19.9373), heading=None)  # ~45 m
+    near = image("near", heading=None)  # ~17 m
+    result = scan_images("p", PLACE, [far, near], FakeDetector(), set(), link_beyond_m=30)
+    surfaces = {o.id.split("-")[1]: o.place_id for o in result.observations if o.type == FeatureType.SURFACE}
+    assert surfaces == {"far": "p", "near": None}  # bliskie zostają wspólne dla okolicy
+
+
 def test_detector_error_does_not_stop_scan():
     result = scan_images("p", PLACE, [image("bad"), image("good")], FakeDetector(fail_on={"bad"}), set())
     assert result.images_analyzed == 1

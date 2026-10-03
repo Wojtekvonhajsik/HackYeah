@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import time
 from datetime import date, datetime
 from typing import Any
 
@@ -282,14 +283,44 @@ def fetch_place_observations(
     last_error: httpx.HTTPError | None = None
     urls = [os.environ["OVERPASS_URL"]] if os.environ.get("OVERPASS_URL") else PUBLIC_OVERPASS_URLS
     for url in urls:
-        try:
-            resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=OVERPASS_TIMEOUT)
-            resp.raise_for_status()
-            return parse_overpass(resp.json(), today, place_id, location, place_osm)
-        except httpx.HTTPError as e:
-            last_error = e
+        for attempt in range(2):
+            try:
+                resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=OVERPASS_TIMEOUT)
+                resp.raise_for_status()
+                return parse_overpass(resp.json(), today, place_id, location, place_osm)
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                # 429 = limit zapytań publicznego serwera, 50x = przeciążenie - jedna ponowna próba po przerwie
+                if e.response.status_code in RETRY_STATUSES and attempt == 0:
+                    time.sleep(_retry_after_s(e.response))
+                    continue
+                break
+            except httpx.HTTPError as e:
+                last_error = e
+                break
     assert last_error is not None
     raise last_error
+
+
+RETRY_STATUSES = {429, 502, 503, 504}
+
+
+def _retry_after_s(resp: httpx.Response) -> float:
+    try:
+        return min(float(resp.headers.get("Retry-After", 5)), 15)
+    except ValueError:
+        return 5
+
+
+def describe_error(e: httpx.HTTPError) -> str:
+    """Krótki opis błędu do komunikatu dla użytkownika."""
+    if isinstance(e, httpx.HTTPStatusError):
+        if e.response.status_code == 429:
+            return "serwer ogranicza liczbę zapytań"
+        return f"błąd serwera HTTP {e.response.status_code}"
+    if isinstance(e, httpx.TimeoutException):
+        return "serwer nie odpowiedział na czas"
+    return "brak połączenia"
 
 
 def search_places(query: str, viewbox: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
