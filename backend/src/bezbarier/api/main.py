@@ -199,6 +199,9 @@ def _load_place_data(place: Place) -> list[str]:
     return []
 
 
+SCAN_MAX_RADIUS_M = 100
+
+
 @app.post("/places/{place_id}/scan")
 def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> ScanResult:
     """Pobiera zdjęcia z Mapillary wokół miejsca, wykrywa na nich cechy i zapisuje je jako obserwacje AI.
@@ -208,15 +211,21 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
     if not 1 <= max_images <= 20:
         raise HTTPException(status_code=400, detail="max_images musi być w zakresie 1-20")
     place = _get_place(place_id)
-    try:
-        images = mapillary.images_near(place.location.lat, place.location.lon, radius_m=radius_m, limit=50)
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail="Brak MAPILLARY_TOKEN - ustaw go w backend/.env") from e
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=503, detail="Mapillary jest niedostępne, spróbuj później") from e
+    # Punkt z OSM bywa na środku dużego budynku (np. Sukiennice) - wtedy powiększamy obszar szukania zdjęć
+    radius = radius_m
+    while True:
+        try:
+            images = mapillary.images_near(place.location.lat, place.location.lon, radius_m=radius, limit=500)
+        except KeyError as e:
+            raise HTTPException(status_code=400, detail="Brak MAPILLARY_TOKEN - ustaw go w backend/.env") from e
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=503, detail="Mapillary jest niedostępne, spróbuj później") from e
+        if images or radius >= SCAN_MAX_RADIUS_M:
+            break
+        radius = min(radius * 2, SCAN_MAX_RADIUS_M)
     result = scan_images(place_id, place.location, images, _detector(), repo.analyzed_images, max_images)
     repo.add_observations(result.observations)
-    return result
+    return result.model_copy(update={"radius_m": radius})
 
 
 @app.post("/observations/analyze")

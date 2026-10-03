@@ -17,6 +17,7 @@ ENTRANCE_MAX_ANGLE_DEG = 45
 
 class ScanResult(BaseModel):
     images_found: int
+    radius_m: float | None = None  # promień, w którym ostatecznie szukano zdjęć
     images_analyzed: int
     images_skipped: int  # już przeanalizowane wcześniej
     observations: list[Observation]

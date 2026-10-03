@@ -225,3 +225,23 @@ def test_osm_place_restored_after_restart(monkeypatch):
 def test_unknown_place_id():
     resp = client.post("/places/nie-ma/assessment", json={"preset": "step_free_strict"})
     assert resp.status_code == 404
+
+
+def test_scan_expands_radius_when_no_images(monkeypatch):
+    radii = []
+
+    def images_near(lat, lon, radius_m, limit):
+        radii.append(radius_m)
+        return _scan_images(lat, lon, radius_m, limit) if radius_m >= 100 else []
+
+    monkeypatch.setattr(main.mapillary, "images_near", images_near)
+    body = client.post("/places/muzeum-kazimierz/scan").json()
+    assert radii == [25, 50, 100]
+    assert body["radius_m"] == 100
+    assert body["images_found"] == 1
+
+
+def test_scan_gives_up_at_max_radius(monkeypatch):
+    monkeypatch.setattr(main.mapillary, "images_near", lambda lat, lon, radius_m, limit: [])
+    body = client.post("/places/muzeum-kazimierz/scan").json()
+    assert (body["images_found"], body["radius_m"]) == (0, 100)
