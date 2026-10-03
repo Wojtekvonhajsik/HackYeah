@@ -53,13 +53,14 @@ Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - 
 |---|---|
 | Hosting | serwer, kopie zapasowe pliku bazy (wystarczy kopiowanie jednego pliku) |
 | Aktualizacje | nowe wersje kodu (obraz Docker), aktualizacje bibliotek |
-| Bezpieczeństwo | HTTPS, klucze w zmiennych środowiskowych, `CORS_ORIGINS` ograniczone do domeny frontendu |
+| Bezpieczeństwo | HTTPS, klucze w zmiennych środowiskowych, `ADMIN_TOKEN` dla płatnego skanu, `CORS_ORIGINS` ograniczone do domeny frontendu |
 | Obsługa zgłoszeń | przegląd zaprzeczeń i poprawek od użytkowników (`POST /observations/{id}/votes`) |
 | Koszty | hosting + detekcja AI dla nowych zdjęć |
 
 ## Aktualność danych
 
-- **OSM** - pobierane przy pierwszej ocenie miejsca; data informacji = `check_date` albo ostatnia edycja w OSM.
+- **OSM** - pobierane przy pierwszej ocenie miejsca i odświeżane co 30 dni (`OSM_REFRESH_DAYS`); data informacji =
+  `check_date` albo ostatnia edycja w OSM. Nieudane odświeżenie = komunikat w `warnings`, ocena na wcześniejszych danych.
 - **Zdjęcia** - skan na żądanie (`/places/{id}/scan`); data informacji = data wykonania zdjęcia, nie analizy.
   Skan wybiera zdjęcia z ostatnich 3 lat (starsze tylko, gdy nowszych nie ma - z adnotacją w `notes`),
   a każdy kolejny skan tego samego miejsca analizuje następne, jeszcze nieprzeanalizowane zdjęcia.
@@ -73,6 +74,7 @@ Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - 
 - Przy głosach zapisujemy wyłącznie losowy identyfikator urządzenia (`voter_id`) i datę.
 - Zdjęcia wysyłane do Gemini nie są przechowywane po stronie Google (`store=False`).
 - Wszystkie klucze w zmiennych środowiskowych; `.env` jest wykluczony z repozytorium.
+- Płatna analiza zdjęć tylko z nagłówkiem `X-Admin-Token`; głosy ograniczone do 30 na godzinę z jednego adresu.
 
 ## Nowe miasto
 
@@ -92,8 +94,9 @@ Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - 
 
 ## Znane ograniczenia prototypu
 
-- Dane z OSM nie są odświeżane po pierwszym pobraniu (do zrobienia: odświeżanie po np. 30 dniach).
-- Brak limitu zapytań przy głosowaniu - jedna osoba może głosować z wielu `voter_id`.
+- Elementy usunięte z OSM zostają w bazie po odświeżeniu (odświeżenie nadpisuje, ale nie kasuje).
+- Limit głosów jest per adres IP i w pamięci serwera - zdeterminowana osoba obejdzie go zmianą sieci;
+  docelowo weryfikacja (np. CAPTCHA przy poprawkach) i moderacja zaprzeczeń.
 - SQLite = jedna instancja serwera; przy skalowaniu poziomym PostgreSQL + PostGIS (ten sam interfejs repozytorium).
 - Jedno wejście na miejsce; lokalizacja cech ze zdjęć = pozycja aparatu, nie obiektu.
 - Progi w profilach i trafność detekcji AI wymagają walidacji z użytkownikami.

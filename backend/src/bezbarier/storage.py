@@ -26,6 +26,7 @@ class Place(BaseModel):
     osm_id: int | None = None
     sample: bool = False
     data_loaded: bool = True      # False = dane z OSM pobierzemy przy pierwszej ocenie
+    data_loaded_at: date | None = None  # kiedy ostatnio pobrano dane z OSM (do odświeżania)
 
 
 class VoteValue(str, Enum):
@@ -50,11 +51,13 @@ class InMemoryRepository:
     def add_place(self, place: Place) -> None:
         existing = self.places.get(place.id)
         if existing is not None and existing.data_loaded:
-            place = place.model_copy(update={"data_loaded": True})
+            place = place.model_copy(update={"data_loaded": True, "data_loaded_at": existing.data_loaded_at})
         self.places[place.id] = place
 
-    def mark_loaded(self, place_id: str) -> None:
-        self.places[place_id] = self.places[place_id].model_copy(update={"data_loaded": True})
+    def mark_loaded(self, place_id: str, when: date | None = None) -> None:
+        self.places[place_id] = self.places[place_id].model_copy(
+            update={"data_loaded": True, "data_loaded_at": when or date.today()}
+        )
 
     def add_observations(self, observations: list[Observation]) -> None:
         for obs in observations:
@@ -176,8 +179,8 @@ class SqliteRepository(InMemoryRepository):
         stored = self.places[place.id]
         self._write("INSERT OR REPLACE INTO places VALUES (?, ?)", [(stored.id, stored.model_dump_json())])
 
-    def mark_loaded(self, place_id: str) -> None:
-        super().mark_loaded(place_id)
+    def mark_loaded(self, place_id: str, when: date | None = None) -> None:
+        super().mark_loaded(place_id, when)
         place = self.places[place_id]
         self._write("INSERT OR REPLACE INTO places VALUES (?, ?)", [(place.id, place.model_dump_json())])
 

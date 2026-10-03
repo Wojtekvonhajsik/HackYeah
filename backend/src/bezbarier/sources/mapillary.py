@@ -21,7 +21,9 @@ LICENSE = "CC-BY-SA 4.0"
 
 
 def images_near(lat: float, lon: float, radius_m: float = 30, limit: int = 20, token: str | None = None) -> list[ImageRef]:
-    token = token or os.environ["MAPILLARY_TOKEN"]
+    token = token or os.environ.get("MAPILLARY_TOKEN")
+    if not token:  # brak albo pusta wartość (np. "MAPILLARY_TOKEN=" z .env.example)
+        raise KeyError("MAPILLARY_TOKEN")
     d_lat = radius_m / 111_320
     d_lon = radius_m / (111_320 * math.cos(math.radians(lat)))
     resp = httpx.get(

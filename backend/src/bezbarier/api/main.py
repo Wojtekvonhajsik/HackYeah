@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from datetime import date
@@ -10,7 +11,7 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
@@ -32,12 +33,17 @@ from ..detection import Detector, ImageRef, detections_to_observations, get_dete
 from ..scan import ScanResult, scan_images
 from ..sources import mapillary, osm
 from ..storage import Place, SqliteRepository, Vote, VoteValue
+from .security import limit_votes, require_admin
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 SAMPLE_DATA = BACKEND_DIR / "data" / "sample_observations.json"
 
 # Klucze (MAPILLARY_TOKEN, GEMINI_API_KEY, DETECTOR...) z backend/.env - plik jest w .gitignore
 load_dotenv(BACKEND_DIR / ".env")
+if not os.environ.get("ADMIN_TOKEN"):
+    logging.getLogger(__name__).warning(
+        "Brak ADMIN_TOKEN - skan zdjęć (płatne API) jest dostępny dla każdego. Ustaw go przed wdrożeniem publicznym."
+    )
 
 app = FastAPI(title="Kraków bez barier - klasyfikacja barier")
 app.add_middleware(
@@ -185,28 +191,38 @@ def _get_place(place_id: str) -> Place:
 @app.post("/places/{place_id}/assessment")
 def place_assessment(place_id: str, req: ProfileRequest) -> Assessment:
     needs = _resolve_needs(req)
-    warnings = _load_place_data(_get_place(place_id))
+    warnings, notes = _load_place_data(_get_place(place_id), req.today or date.today())
     features = group_observations(repo.observations_for_place(place_id))
-    return assess(features, needs, req.today, default_required(needs, "place"), warnings)
+    result = assess(features, needs, req.today, default_required(needs, "place"), warnings)
+    result.warnings.extend(notes)  # informacja dla użytkownika, ale nie obniża oceny
+    return result
 
 
-def _load_place_data(place: Place) -> list[str]:
-    """Przy pierwszej ocenie miejsca z OSM pobieramy cechy z otoczenia. Błąd źródła = ostrzeżenie, nie awaria."""
-    if place.data_loaded:
-        return []
+def _load_place_data(place: Place, today: date) -> tuple[list[str], list[str]]:
+    """Pobiera cechy z OSM przy pierwszej ocenie miejsca i odświeża je co OSM_REFRESH_DAYS dni.
+
+    Zwraca (ostrzeżenia, informacje). Ostrzeżenie = nie mamy danych z OSM wcale (ocena nie może być
+    "brak znanych barier"); informacja = odświeżenie się nie udało, ale mamy wcześniejsze dane.
+    """
     place_osm = (place.osm_type, place.osm_id) if place.osm_type and place.osm_id else None
+    refresh_days = int(os.environ.get("OSM_REFRESH_DAYS", "30"))
+    stale = place.data_loaded_at is None or (today - place.data_loaded_at).days >= refresh_days
+    if place.data_loaded and not (place_osm and stale):
+        return [], []
     try:
         repo.add_observations(osm.fetch_place_observations(place.id, place.location, place_osm))
     except httpx.HTTPError:
-        return ["Nie udało się pobrać danych z OpenStreetMap - pokazujemy tylko dane zapisane wcześniej."]
-    repo.mark_loaded(place.id)
-    return []
+        if place.data_loaded:
+            return [], [f"Nie udało się odświeżyć danych z OpenStreetMap - pokazujemy dane z {place.data_loaded_at}."]
+        return ["Nie udało się pobrać danych z OpenStreetMap - pokazujemy tylko dane zapisane wcześniej."], []
+    repo.mark_loaded(place.id, today)
+    return [], []
 
 
 SCAN_MAX_RADIUS_M = 100
 
 
-@app.post("/places/{place_id}/scan")
+@app.post("/places/{place_id}/scan", dependencies=[Depends(require_admin)])
 def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> ScanResult:
     """Pobiera zdjęcia z Mapillary wokół miejsca, wykrywa na nich cechy i zapisuje je jako obserwacje AI.
 
@@ -222,6 +238,10 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
             images = mapillary.images_near(place.location.lat, place.location.lon, radius_m=radius, limit=500)
         except KeyError as e:
             raise HTTPException(status_code=400, detail="Brak MAPILLARY_TOKEN - ustaw go w backend/.env") from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (401, 403):
+                raise HTTPException(status_code=400, detail="Mapillary odrzuciło MAPILLARY_TOKEN - sprawdź token") from e
+            raise HTTPException(status_code=503, detail="Mapillary jest niedostępne, spróbuj później") from e
         except httpx.HTTPError as e:
             raise HTTPException(status_code=503, detail="Mapillary jest niedostępne, spróbuj później") from e
         if images or radius >= SCAN_MAX_RADIUS_M:
@@ -233,7 +253,7 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
     return result.model_copy(update={"radius_m": radius})
 
 
-@app.post("/observations/analyze")
+@app.post("/observations/analyze", dependencies=[Depends(require_admin)])
 def analyze(req: AnalyzeRequest) -> list[Observation]:
     """Uruchamia detektor na zdjęciu i zapisuje obserwacje (niezależne od profilu)."""
     detector = _detector()
@@ -249,7 +269,7 @@ def analyze(req: AnalyzeRequest) -> list[Observation]:
     return observations
 
 
-@app.post("/observations/{observation_id}/votes")
+@app.post("/observations/{observation_id}/votes", dependencies=[Depends(limit_votes)])
 def vote(observation_id: str, req: VoteRequest) -> VoteResponse:
     """Użytkownik potwierdza ("confirm") albo zaprzecza ("deny") informacji. Opcjonalnie podaje poprawkę."""
     original = repo.get_observation(observation_id)
