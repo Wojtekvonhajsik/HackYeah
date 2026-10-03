@@ -193,7 +193,7 @@ def place_assessment(place_id: str, req: ProfileRequest) -> Assessment:
     needs = _resolve_needs(req)
     warnings, notes = _load_place_data(_get_place(place_id), req.today or date.today())
     features = group_observations(repo.observations_for_place(place_id))
-    result = assess(features, needs, req.today, default_required(needs, "place"), warnings)
+    result = assess(features, needs, req.today, default_required(needs, "place"), warnings, place_id=place_id)
     result.warnings.extend(notes)  # informacja dla użytkownika, ale nie obniża oceny
     return result
 

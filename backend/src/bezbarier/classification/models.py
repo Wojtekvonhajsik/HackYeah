@@ -97,7 +97,8 @@ class Observation(BaseModel):
     location: GeoPoint
     source: Source
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)  # pewność detektora; 1.0 dla danych spoza AI
-    place_id: str | None = None     # jeśli cecha dotyczy konkretnego miejsca (np. wejście do kawiarni)
+    place_id: str | None = None     # cecha SAMEGO miejsca (np. wejście do kawiarni) - decyduje o jego ocenie
+    near_place_id: str | None = None  # cecha z okolicy miejsca spoza promienia (np. dalekie zdjęcie ze skanu)
     # Głosy użytkowników ("to prawda" / "to nieprawda") - liczone przez repozytorium
     confirmations: int = 0
     denials: int = 0

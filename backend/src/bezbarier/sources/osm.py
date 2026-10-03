@@ -234,12 +234,17 @@ def parse_overpass(
         if location is None:
             continue
         is_place = place_osm is not None and (el["type"], el["id"]) == place_osm
+        # Wejście blisko miejsca = wejście do miejsca: jego tagi (szerokość, stopnie) opisują samo miejsce
+        is_place_entrance = (
+            not is_place
+            and "entrance" in el.get("tags", {})
+            and place_location is not None
+            and haversine_m(location, place_location) <= ENTRANCE_LINK_RADIUS_M
+        )
         for ftype, attrs in _features_from_tags(el, is_place):
-            obs_place_id = place_id if is_place else None
-            if ftype == FeatureType.ENTRANCE and not is_place:
-                if place_location is None or haversine_m(location, place_location) > ENTRANCE_LINK_RADIUS_M:
-                    continue
-                obs_place_id = place_id
+            obs_place_id = place_id if is_place or is_place_entrance else None
+            if ftype == FeatureType.ENTRANCE and obs_place_id is None:
+                continue  # wejście do sąsiedniego budynku
             observations.append(Observation(
                 id=f"osm-{el['type']}-{el['id']}-{ftype.value}",
                 type=ftype,

@@ -41,10 +41,16 @@ def test_sample_place_with_conflict():
     resp = client.post("/places/kawiarnia-rynek/assessment", json={"preset": "step_free_strict", **TODAY})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["summary"] == "barriers"
+    # sprzeczne, słabe źródła o krawężniku -> "do sprawdzenia", a nie "nie do pokonania"
+    assert body["summary"] == "difficulties"
     assert body["contains_sample_data"] is True
     kerb = next(f for f in body["features"] if f["type"] == "kerb")
     assert kerb["conflict"] is True
+    assert kerb["scope"] == "place"
+    assert kerb["verdict"] == "uncertain"
+    assert 0 < kerb["confidence_pct"] < 30
+    surface = next(f for f in body["features"] if f["type"] == "surface")
+    assert surface["scope"] == "surroundings"
 
 
 def test_sample_place_without_entrance_data():

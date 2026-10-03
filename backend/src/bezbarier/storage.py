@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .classification.fusion import haversine_m
-from .classification.models import GeoPoint, Observation, Source, SourceType
+from .classification.models import FeatureType, GeoPoint, Observation, Source, SourceType
 
 
 # Obserwacje bez place_id w tym promieniu od miejsca należą do jego otoczenia (chodnik, krawężnik)
@@ -83,6 +83,7 @@ class InMemoryRepository:
             if (place.sample or not obs.source.sample)
             and (
                 obs.place_id == place_id
+                or obs.near_place_id == place_id
                 or (obs.place_id is None and haversine_m(obs.location, place.location) <= radius_m)
             )
         ]
@@ -148,6 +149,14 @@ CREATE TABLE IF NOT EXISTS analyzed_images (key TEXT PRIMARY KEY);
 """
 
 
+def _migrate(obs: Observation) -> Observation:
+    """Starsze skany przypisywały dalekie zdjęcia przez place_id - teraz to okolica (near_place_id).
+    Ze skanu do samego miejsca należą tylko wejścia."""
+    if obs.source.type == SourceType.AI_DETECTION and obs.type != FeatureType.ENTRANCE and obs.place_id:
+        return obs.model_copy(update={"place_id": None, "near_place_id": obs.place_id})
+    return obs
+
+
 class SqliteRepository(InMemoryRepository):
     """Ta sama logika co w pamięci, ale każdy zapis trafia też do pliku SQLite.
 
@@ -167,7 +176,7 @@ class SqliteRepository(InMemoryRepository):
             place = Place.model_validate_json(data)
             self.places[place.id] = place
         for (data,) in self._db.execute("SELECT data FROM observations"):
-            obs = Observation.model_validate_json(data)
+            obs = _migrate(Observation.model_validate_json(data))
             self._observations[obs.id] = obs
         for (data,) in self._db.execute("SELECT data FROM votes"):
             vote = Vote.model_validate_json(data)

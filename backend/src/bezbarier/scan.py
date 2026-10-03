@@ -86,8 +86,9 @@ def scan_images(
 ) -> ScanResult:
     """Każdy skan analizuje do max_images NOWYCH zdjęć - kolejny skan tego samego miejsca bierze następne.
 
-    link_beyond_m: obserwacje ze zdjęć dalszych niż tyle od miejsca dostają jego place_id - inaczej przy
-    powiększonym promieniu skanu wypadłyby poza otoczenie miejsca i nie trafiłyby do jego oceny.
+    link_beyond_m: obserwacje ze zdjęć dalszych niż tyle od miejsca dostają near_place_id (okolica miejsca) -
+    inaczej przy powiększonym promieniu skanu wypadłyby poza okolicę i nie trafiłyby do oceny.
+    Do samego miejsca (place_id) przypisujemy tylko wejścia widoczne z kamery skierowanej na miejsce.
     """
     today = today or date.today()
     skipped = sum(_key(im) in already_analyzed for im in images)
@@ -111,7 +112,7 @@ def scan_images(
                     continue  # wejście do innego budynku
                 obs = obs.model_copy(update={"place_id": place_id})
             elif link_beyond_m is not None and haversine_m(image.location, place_location) > link_beyond_m:
-                obs = obs.model_copy(update={"place_id": place_id})
+                obs = obs.model_copy(update={"near_place_id": place_id})
             observations.append(obs)
     return ScanResult(
         images_found=len(images),
