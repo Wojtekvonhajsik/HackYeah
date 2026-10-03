@@ -2,12 +2,20 @@
 2. Wymagania:
 a) bariery i udogodnienia
 b) wskazwyania zródła informacji
-c) mały model LLM w którym filrmy będą mogły wykupywać reklamy 
-d) asysten głosowy 
-
-
+c) wybranie przez uzytkownika refenecji nie moze byc przekazywane w formie niepełnosprawnosci tylko np. wybrano ograniczenia motoryczne zamiast jezdze na wózku itp
+d)
 
 3.Pomysły:
 a)konfiguracja profilu urzytkownika np niewidomy, schorzenia motoryczne, głuchy itp.
 b)ai do wykrywania po zdjęciach przeszkód biorać pod uwagę profil użytkownika
-c)
+c)uzytkownicy mogą potwierzać lub zaprzeczać czy ai dobrze wykryło dostepność/niedostepnosć
+d) mały model LLM w którym filrmy będą mogły wykupywać reklamy swojich miejsc - potencjał komercjalizacji
+e) asysten głosowy 
+
+
+4. Wykorzystane zbiory danych:
+mappilary
+otwarte dane um kraków
+MSIP
+dane.gov.pl 
+open streets maps
