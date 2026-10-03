@@ -121,7 +121,7 @@ a { color: var(--primary); }
 .btn[aria-pressed="true"] { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
 .btn[disabled] { opacity: 0.6; cursor: not-allowed; }
 
-input[type="search"], input[type="number"] {
+input[type="search"], input[type="number"], input[type="text"], select {
   min-height: 48px; width: 100%; padding: 10px 14px; font: inherit; color: var(--text);
   background: var(--surface); border: 1px solid var(--muted); border-radius: 12px;
 }
@@ -218,6 +218,23 @@ details.evidence { margin-top: 8px; border-top: 1px solid var(--border); padding
 .vote { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
 details.around { margin-top: 20px; }
+
+/* ---------- formularze zgłoszeń ---------- */
+.form-grid { display: grid; gap: 6px; }
+.form-grid label { font-size: 0.95rem; margin-top: 6px; }
+.form-section { font-size: 1.05rem; margin: 14px 0 0; }
+.check { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.check input { width: 22px; height: 22px; accent-color: var(--primary); }
+.report summary {
+  cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; gap: 10px;
+  list-style: none; color: var(--primary);
+}
+.report summary::before { content: "＋"; flex: none; }
+.report[open] summary::before { content: "−"; }
+.report form { margin-top: 8px; }
+.correction { margin-top: 10px; padding: 12px; border-radius: 10px; border: 1px dashed var(--border); background: var(--surface); }
+.correction p { margin: 0 0 6px; }
+.form-error { color: var(--blocker); font-weight: 600; margin: 8px 0 0; }
 details.around > summary h2 { display: inline; }
 
 .footer { padding: 16px; text-align: center; font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--border); }

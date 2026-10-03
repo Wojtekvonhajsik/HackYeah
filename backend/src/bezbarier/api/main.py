@@ -11,11 +11,11 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..classification import (
     Assessment,
@@ -24,12 +24,14 @@ from ..classification import (
     Needs,
     Observation,
     PresetInfo,
+    SourceType,
     assess,
     default_required,
     group_observations,
     needs_from_preset,
     preset_catalog,
 )
+from ..classification.report_schema import validate_report
 from ..detection import Detector, ImageRef, detections_to_observations, get_detector
 from ..scan import ScanResult, scan_images
 from ..sources import mapillary, osm
@@ -91,6 +93,35 @@ class VoteRequest(BaseModel):
 class VoteResponse(BaseModel):
     observation: Observation
     correction: Observation | None = None
+
+
+class ReportItem(BaseModel):
+    type: FeatureType
+    attrs: dict[str, Any]
+
+
+class OwnerReportRequest(BaseModel):
+    reports: list[ReportItem] = Field(min_length=1, max_length=10)
+
+
+class OwnerCodeRequest(BaseModel):
+    place_id: str
+    owner_name: str = Field(min_length=2, max_length=80)
+
+
+class OwnerCodeResponse(BaseModel):
+    place_id: str
+    place_name: str
+    owner_name: str
+    code: str       # przekaż właścicielowi - nie da się go później odczytać z bazy
+    form_path: str  # strona formularza w aplikacji
+
+
+def _validated(feature_type: FeatureType, attrs: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return validate_report(feature_type, attrs)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Niepoprawne zgłoszenie: {e}") from e
 
 
 def _resolve_needs(req: ProfileRequest) -> Needs:
@@ -289,9 +320,51 @@ def vote(observation_id: str, req: VoteRequest) -> VoteResponse:
         raise HTTPException(status_code=404, detail=f"Nie ma obserwacji {observation_id}")
     if req.correction_attrs is not None and req.value != VoteValue.DENY:
         raise HTTPException(status_code=400, detail="Poprawkę można dodać tylko do głosu 'deny'")
+    correction_attrs = _validated(original.type, req.correction_attrs) if req.correction_attrs is not None else None
     today = date.today()
     updated = repo.add_vote(Vote(observation_id=observation_id, voter_id=req.voter_id, value=req.value, created_at=today))
     correction = None
-    if req.correction_attrs is not None:
-        correction = repo.add_correction(original, req.correction_attrs, today)
+    if correction_attrs is not None:
+        correction = repo.add_correction(original, correction_attrs, today)
     return VoteResponse(observation=updated, correction=correction)
+
+
+@app.post("/places/{place_id}/reports", dependencies=[Depends(limit_votes)])
+def report(place_id: str, req: ReportItem) -> Observation:
+    """Użytkownik uzupełnia brakującą informację o miejscu, np. szerokość drzwi. Trafia jako niepotwierdzone
+    zgłoszenie - inni mogą je potwierdzić (3 potwierdzenia = status 'potwierdzone')."""
+    place = _get_place(place_id)
+    attrs = _validated(req.type, req.attrs)
+    return repo.add_report(place, req.type, attrs, SourceType.USER_REPORT, "Zgłoszenie użytkownika", date.today())
+
+
+@app.post("/admin/owner-codes", dependencies=[Depends(require_admin)])
+def create_owner_code(req: OwnerCodeRequest) -> OwnerCodeResponse:
+    """Kod dla właściciela obiektu (hotel, muzeum...) - wydawany np. po weryfikacji przy podpisaniu umowy."""
+    place = _get_place(req.place_id)
+    code = repo.create_owner_code(place.id, req.owner_name.strip())
+    return OwnerCodeResponse(
+        place_id=place.id,
+        place_name=place.name,
+        owner_name=req.owner_name.strip(),
+        code=code,
+        form_path=f"/app/#/wlasciciel/{place.id}",
+    )
+
+
+@app.post("/places/{place_id}/owner-reports", dependencies=[Depends(limit_votes)])
+def owner_report(
+    place_id: str, req: OwnerReportRequest, x_owner_code: str | None = Header(default=None)
+) -> list[Observation]:
+    """Właściciel podaje dane o swoim obiekcie (nagłówek X-Owner-Code). Źródło 'właściciel obiektu' ma wysoką
+    wiarygodność i status 'potwierdzone'."""
+    place = _get_place(place_id)
+    owner = repo.owner_for_code(place.id, x_owner_code or "")
+    if owner is None:
+        raise HTTPException(status_code=401, detail="Nieprawidłowy kod właściciela dla tego miejsca")
+    cleaned = [(item.type, _validated(item.type, item.attrs)) for item in req.reports]  # najpierw walidacja całości
+    today = date.today()
+    return [
+        repo.add_report(place, feature_type, attrs, SourceType.OWNER, f"Właściciel: {owner}", today)
+        for feature_type, attrs in cleaned
+    ]
