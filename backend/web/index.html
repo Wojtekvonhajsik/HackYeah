@@ -84,6 +84,32 @@
       </details>
     </section>
 
+    <!-- ============ WŁAŚCICIEL OBIEKTU ============ -->
+    <section id="view-owner" class="view" hidden aria-labelledby="owner-title">
+      <h1 id="owner-title">Dane od właściciela</h1>
+      <p id="owner-place" class="lead"></p>
+      <p class="hint">Dane z kodem właściciela są oznaczane jako potwierdzone i mają wysoką wiarygodność. Podaj tylko to, co wiesz na pewno - puste pole oznacza „nie wiem”.</p>
+      <form id="owner-form" class="card form-grid" novalidate>
+        <label for="owner-code">Kod właściciela</label>
+        <input id="owner-code" name="code" type="text" autocomplete="one-time-code" autocapitalize="characters" placeholder="np. A1B2-C3D4-E5F6" required>
+
+        <h2 class="form-section">Wejście</h2>
+        <div id="owner-entrance" class="form-grid"></div>
+
+        <h2 class="form-section">Schody przy wejściu</h2>
+        <div id="owner-steps" class="form-grid"></div>
+
+        <h2 class="form-section">Udogodnienia</h2>
+        <label class="check"><input type="checkbox" name="amenity" value="toilets_wheelchair"> Toaleta dostępna dla wózków</label>
+        <label class="check"><input type="checkbox" name="amenity" value="elevator"> Winda</label>
+        <label class="check"><input type="checkbox" name="amenity" value="bench"> Miejsce do odpoczynku / ławka</label>
+
+        <p id="owner-error" class="notice warn" role="alert" hidden></p>
+        <button class="btn primary block" type="submit">Zapisz dane obiektu</button>
+      </form>
+      <div id="owner-done" hidden></div>
+    </section>
+
     <!-- ============ MIEJSCE ============ -->
     <section id="view-place" class="view" hidden aria-labelledby="place-title">
       <a class="back" href="#/">← Wróć do wyszukiwania</a>

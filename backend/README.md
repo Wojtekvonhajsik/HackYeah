@@ -43,14 +43,39 @@ curl -X POST localhost:8000/places/kawiarnia-rynek/assessment -H "Content-Type: 
 Backend serwuje aplikację pod `http://localhost:8000/` (przekierowanie na `/app/`, pliki w `backend/web/`, bez kroku
 budowania). Projektowana najpierw pod telefon, z obsługą klawiatury i czytnika ekranu (WCAG 2.2 AA).
 
-Na telefonie w tej samej sieci Wi-Fi:
+### Publiczny adres przez tunel (telefon, jury) - zalecane
+
+Sieci hackathonowe i firmowe zwykle izolują urządzenia od siebie, więc telefon nie widzi laptopa. Tunel Cloudflare
+daje darmowy, szyfrowany adres `https://….trycloudflare.com` bez zakładania konta (działa, dopóki laptop i tunel są włączone).
+HTTPS jest też potrzebny do wyszukiwania głosowego (mikrofon) w przeglądarce telefonu.
+
+1. Jednorazowo: `winget install --id Cloudflare.cloudflared` (potem nowe okno terminala).
+2. W `backend/.env` ustaw `ADMIN_TOKEN=<długi losowy ciąg>` (adres będzie publiczny - bez tego każdy może
+   uruchamiać płatny skan) i na czas demo `VOTE_RATE_LIMIT_PER_HOUR=300` (jury może głosować z jednej sieci).
+3. Terminal 1: `.venv\Scripts\python -m uvicorn bezbarier.api.main:app --port 8000`
+4. Terminal 2: `cloudflared tunnel --url http://localhost:8000` - w wypisanym tekście jest adres `https://…trycloudflare.com`.
+5. Otwórz ten adres na telefonie. W Chrome na Androidzie: menu → „Dodaj do ekranu głównego”.
+
+Adres zmienia się przy każdym uruchomieniu tunelu. Stały adres: hosting kontenera (`Dockerfile`, opis w `docs/wdrozenie.md`).
+
+### W tej samej sieci Wi-Fi (bez tunelu)
 
 ```bash
 .venv\Scripts\python -m uvicorn bezbarier.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-i na telefonie otwórz `http://<adres IP komputera>:8000` (adres: `ipconfig`, pole „IPv4”). Windows może zapytać
-o dostęp przez zaporę - zezwól dla sieci prywatnej. W Chrome na Androidzie: menu → „Dodaj do ekranu głównego”.
+i na telefonie `http://<adres IP komputera>:8000` (adres: `ipconfig`, pole „IPv4”). Działa tylko, gdy sieć nie izoluje
+urządzeń i zapora Windows przepuszcza port 8000 (przy pierwszym uruchomieniu zezwól dla sieci prywatnej).
+
+### Dane od właścicieli obiektów
+
+Właściciel (hotel, muzeum…) dostaje kod i link do formularza; jego dane mają status „potwierdzone”:
+
+```bash
+.venv\Scripts\python scripts\owner_code.py "Teatr Bagatela" "Teatr Bagatela - administracja" --base-url https://twoj-adres
+```
+
+(przy zatrzymanym serwerze; kod jest pokazywany tylko raz).
 
 ## Główne endpointy
 
@@ -61,6 +86,9 @@ o dostęp przez zaporę - zezwól dla sieci prywatnej. W Chrome na Androidzie: m
 | `POST /places/{id}/assessment` | ocena miejsca dla profilu; przy pierwszym wywołaniu pobiera cechy z OSM (Overpass) |
 | `POST /places/{id}/scan` | analiza zdjęć Mapillary wokół miejsca (każde zdjęcie tylko raz; z `ADMIN_TOKEN` wymaga nagłówka `X-Admin-Token`) |
 | `POST /observations/{id}/votes` | potwierdzenie / zaprzeczenie informacji, opcjonalnie z poprawką |
+| `POST /places/{id}/reports` | użytkownik uzupełnia brakującą informację (np. szerokość drzwi) |
+| `POST /places/{id}/owner-reports` | dane od właściciela obiektu (nagłówek `X-Owner-Code`) |
+| `POST /admin/owner-codes` | wydanie kodu właściciela (z `ADMIN_TOKEN` wymaga `X-Admin-Token`) |
 | `POST /classify` | czysta klasyfikacja przesłanych obserwacji |
 | `POST /observations/analyze` | detekcja cech na zdjęciu |
 

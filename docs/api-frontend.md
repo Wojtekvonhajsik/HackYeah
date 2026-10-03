@@ -92,6 +92,37 @@ Werdykt pokazuj **tekstem i ikoną, nie samym kolorem** (WCAG). Proponowane etyk
 - `voter_id`: wygeneruj raz losowy UUID i trzymaj na urządzeniu (tak robi już `getVoterId()` w `frontend/src/api/client.ts`) - bez kont i danych osobowych.
 - `observation_id` bierzesz z `features[].evidence[]`.
 - Po głosie pobierz ocenę ponownie. Limit: 30 głosów na godzinę z jednego adresu (odpowiedź `429` + nagłówek `Retry-After`).
+- Przy „nie zgadza się” zapytaj „jak jest naprawdę?” - pola poprawki zależą od typu cechy (tabela niżej).
+
+### 5. Uzupełnienie brakującej informacji - `POST /places/{id}/reports`
+
+Gdy ocena ma `missing[]` (np. „szerokość wejścia”), pozwól użytkownikowi ją podać:
+
+```json
+{"type": "entrance", "attrs": {"width_cm": 90, "threshold_cm": 0}}
+```
+
+Zgłoszenie trafia jako „niepotwierdzone” (3 potwierdzenia innych osób = „potwierdzone”). Ten sam limit co głosy.
+Pola (każde opcjonalne, ale co najmniej jedno wymagane; nieznane pola i wartości spoza zakresu -> `400`):
+
+| `type` | Pola |
+|---|---|
+| `entrance` | `width_cm` (20-1000), `threshold_cm` (0-100), `automatic_door` (bool) |
+| `steps` | `count` (liczba całkowita), `ramp`, `elevator`, `handrail`, `contrast_marking` (bool) |
+| `kerb` | `kind` (`raised` / `lowered` / `flush`), `height_cm` (0-100) |
+| `surface` | `value` (wartość OSM, np. `asphalt`, `sett`, `paving_stones`) |
+| `path_width` | `width_cm` |
+| `ramp` | `incline_pct` (0-100), `width_cm` |
+| `incline` | `incline_pct` |
+| `obstacle` | `kind` (tekst), `blocks_path`, `remaining_width_cm`, `temporary` |
+| `crossing` | `kerb`, `kerb_height_cm`, `tactile_paving`, `traffic_signals`, `sound_signals` |
+| `amenity` | `kind` (`toilets_wheelchair` / `elevator` / `bench`) - wymagane |
+
+### 6. Dane od właściciela - `POST /places/{id}/owner-reports`
+
+Nagłówek `X-Owner-Code: <kod>` (wydaje administrator: `scripts/owner_code.py`), body:
+`{"reports": [{"type": "entrance", "attrs": {...}}, {"type": "amenity", "attrs": {"kind": "toilets_wheelchair"}}]}`.
+Zły kod -> `401`. Dane mają źródło „właściciel obiektu” i status „potwierdzone”. W aplikacji webowej: `/app/#/wlasciciel/<id>`.
 
 ## Przykład (fetch)
 

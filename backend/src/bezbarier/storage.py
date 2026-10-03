@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 import sqlite3
 import threading
 import uuid
@@ -45,12 +47,26 @@ class Vote(BaseModel):
     created_at: date
 
 
+class OwnerCode(BaseModel):
+    """Kod, którym właściciel obiektu potwierdza, że może dodawać dane o swoim miejscu."""
+
+    code_hash: str  # w bazie tylko hash - wyciek bazy nie ujawnia kodów
+    place_id: str
+    owner_name: str
+    created_at: date
+
+
+def _hash_code(code: str) -> str:
+    return hashlib.sha256(code.strip().upper().encode()).hexdigest()
+
+
 class InMemoryRepository:
     def __init__(self) -> None:
         self.places: dict[str, Place] = {}
         self._observations: dict[str, Observation] = {}
         self._votes: dict[str, dict[str, Vote]] = {}  # observation_id -> voter_id -> głos
         self.analyzed_images: set[str] = set()  # "<provider>-<id>" - nie analizujemy zdjęcia dwa razy
+        self._owner_codes: dict[str, OwnerCode] = {}  # hash kodu -> kod
 
     def add_place(self, place: Place) -> None:
         existing = self.places.get(place.id)
@@ -103,10 +119,50 @@ class InMemoryRepository:
             attrs=attrs,
             location=original.location,
             place_id=original.place_id,
+            near_place_id=original.near_place_id,
             source=Source(type=SourceType.USER_REPORT, name="Poprawka użytkownika", observed_at=today),
         )
         self.add_observations([correction])
         return correction
+
+    def add_report(
+        self,
+        place: Place,
+        feature_type: FeatureType,
+        attrs: dict[str, Any],
+        source_type: SourceType,
+        source_name: str,
+        today: date,
+    ) -> Observation:
+        """Nowa informacja o samym miejscu od człowieka (użytkownik albo właściciel)."""
+        report = Observation(
+            id=f"{source_type.value}-{uuid.uuid4().hex[:12]}",
+            type=feature_type,
+            attrs=attrs,
+            location=place.location,
+            place_id=place.id,
+            source=Source(type=source_type, name=source_name, observed_at=today),
+        )
+        self.add_observations([report])
+        return report
+
+    def create_owner_code(self, place_id: str, owner_name: str, today: date | None = None) -> str:
+        """Zwraca kod do przekazania właścicielowi (np. 'A1B2-C3D4-E5F6'); zapisujemy tylko jego hash."""
+        raw = secrets.token_hex(6).upper()
+        code = "-".join(raw[i:i + 4] for i in range(0, 12, 4))
+        entry = OwnerCode(
+            code_hash=_hash_code(code), place_id=place_id, owner_name=owner_name, created_at=today or date.today()
+        )
+        self._owner_codes[entry.code_hash] = entry
+        self._save_owner_code(entry)
+        return code
+
+    def owner_for_code(self, place_id: str, code: str) -> str | None:
+        entry = self._owner_codes.get(_hash_code(code))
+        return entry.owner_name if entry is not None and entry.place_id == place_id else None
+
+    def _save_owner_code(self, entry: OwnerCode) -> None:
+        """W pamięci nic więcej do zrobienia; SqliteRepository zapisuje do bazy."""
 
     def _with_votes(self, obs: Observation) -> Observation:
         votes = self._votes.get(obs.id)
@@ -146,6 +202,7 @@ CREATE TABLE IF NOT EXISTS votes (
     PRIMARY KEY (observation_id, voter_id)
 );
 CREATE TABLE IF NOT EXISTS analyzed_images (key TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS owner_codes (code_hash TEXT PRIMARY KEY, data TEXT NOT NULL);
 """
 
 
@@ -182,6 +239,9 @@ class SqliteRepository(InMemoryRepository):
             vote = Vote.model_validate_json(data)
             self._votes.setdefault(vote.observation_id, {})[vote.voter_id] = vote
         self.analyzed_images.update(key for (key,) in self._db.execute("SELECT key FROM analyzed_images"))
+        for (data,) in self._db.execute("SELECT data FROM owner_codes"):
+            entry = OwnerCode.model_validate_json(data)
+            self._owner_codes[entry.code_hash] = entry
 
     def _write(self, sql: str, rows: list[tuple[str, ...]]) -> None:
         with self._lock, self._db:  # "with self._db" = transakcja z automatycznym commit
@@ -211,6 +271,9 @@ class SqliteRepository(InMemoryRepository):
             [(vote.observation_id, vote.voter_id, vote.model_dump_json())],
         )
         return result
+
+    def _save_owner_code(self, entry: OwnerCode) -> None:
+        self._write("INSERT OR REPLACE INTO owner_codes VALUES (?, ?)", [(entry.code_hash, entry.model_dump_json())])
 
     def save_analyzed_images(self) -> None:
         self._write("INSERT OR IGNORE INTO analyzed_images VALUES (?)", [(key,) for key in self.analyzed_images])

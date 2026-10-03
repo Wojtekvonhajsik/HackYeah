@@ -38,6 +38,61 @@ const SOURCE = {
   ai_detection: "Analiza zdjęcia (AI)",
 };
 
+// Pola zgłoszeń - zgodne z walidacją w backendzie (classification/report_schema.py)
+const SURFACES = [
+  ["asphalt", "asfalt"], ["concrete", "beton"], ["paving_stones", "płyty / kostka betonowa"],
+  ["sett", "kostka kamienna"], ["cobblestone", "bruk"], ["unhewn_cobblestone", "kocie łby"],
+  ["gravel", "żwir"], ["fine_gravel", "drobny żwir"], ["compacted", "utwardzona ziemia"],
+  ["grass", "trawa"], ["sand", "piasek"], ["dirt", "ziemia"], ["wood", "drewno"],
+];
+const KERBS = [["lowered", "obniżony"], ["flush", "równo z chodnikiem"], ["raised", "wysoki"]];
+
+const FIELDS = {
+  entrance: [
+    { key: "width_cm", label: "Szerokość drzwi (cm)", kind: "number", min: 20, max: 1000 },
+    { key: "threshold_cm", label: "Wysokość progu (cm, 0 = brak progu)", kind: "number", min: 0, max: 100 },
+    { key: "automatic_door", label: "Drzwi automatyczne", kind: "bool" },
+  ],
+  steps: [
+    { key: "count", label: "Liczba stopni", kind: "number", min: 0, max: 500 },
+    { key: "ramp", label: "Jest podjazd", kind: "bool" },
+    { key: "elevator", label: "Jest winda", kind: "bool" },
+    { key: "handrail", label: "Jest poręcz", kind: "bool" },
+  ],
+  kerb: [
+    { key: "kind", label: "Krawężnik", kind: "select", options: KERBS },
+    { key: "height_cm", label: "Wysokość (cm)", kind: "number", min: 0, max: 100 },
+  ],
+  surface: [{ key: "value", label: "Nawierzchnia", kind: "select", options: SURFACES }],
+  path_width: [{ key: "width_cm", label: "Szerokość przejścia (cm)", kind: "number", min: 0, max: 1000 }],
+  ramp: [
+    { key: "incline_pct", label: "Nachylenie (%)", kind: "number", min: 0, max: 100 },
+    { key: "width_cm", label: "Szerokość (cm)", kind: "number", min: 0, max: 1000 },
+  ],
+  incline: [{ key: "incline_pct", label: "Nachylenie (%)", kind: "number", min: 0, max: 100 }],
+  obstacle: [
+    { key: "kind", label: "Co to za przeszkoda", kind: "text" },
+    { key: "blocks_path", label: "Blokuje przejście", kind: "bool" },
+    { key: "remaining_width_cm", label: "Wolne miejsce obok (cm)", kind: "number", min: 0, max: 1000 },
+    { key: "temporary", label: "Tymczasowa (np. remont)", kind: "bool" },
+  ],
+  crossing: [
+    { key: "tactile_paving", label: "Ścieżka dotykowa", kind: "bool" },
+    { key: "sound_signals", label: "Sygnalizacja dźwiękowa", kind: "bool" },
+    { key: "kerb", label: "Krawężnik na przejściu", kind: "select", options: KERBS },
+  ],
+  amenity: [{
+    key: "kind", label: "Rodzaj", kind: "select",
+    options: [["toilets_wheelchair", "toaleta dostępna dla wózków"], ["elevator", "winda"], ["bench", "ławka"]],
+  }],
+};
+
+const TYPE_LABEL = {
+  entrance: "Wejście", steps: "Schody", kerb: "Krawężnik", surface: "Nawierzchnia", path_width: "Szerokość przejścia",
+  ramp: "Podjazd", incline: "Nachylenie", obstacle: "Przeszkoda", crossing: "Przejście dla pieszych",
+  amenity: "Udogodnienie (toaleta, winda, ławka)",
+};
+
 // ---------- narzędzia ----------
 
 const $ = (selector) => document.querySelector(selector);
@@ -97,6 +152,40 @@ async function api(path, options = {}) {
   return body;
 }
 
+let fieldSeq = 0;
+
+function fieldsHtml(type) {
+  return FIELDS[type].map((field) => {
+    const id = `fld-${++fieldSeq}`;
+    const label = `<label for="${id}">${esc(field.label)}</label>`;
+    if (field.kind === "number") {
+      return `${label}<input id="${id}" name="${field.key}" type="number" inputmode="decimal" min="${field.min}" max="${field.max}" step="any">`;
+    }
+    if (field.kind === "text") return `${label}<input id="${id}" name="${field.key}" type="text" maxlength="40">`;
+    const options = field.kind === "bool" ? [["true", "tak"], ["false", "nie"]] : field.options;
+    return `${label}<select id="${id}" name="${field.key}"><option value="">nie wiem</option>${
+      options.map(([value, text]) => `<option value="${value}">${esc(text)}</option>`).join("")}</select>`;
+  }).join("");
+}
+
+function readAttrs(container, type) {
+  const attrs = {};
+  for (const field of FIELDS[type]) {
+    const el = container.querySelector(`[name="${field.key}"]`);
+    if (!el || el.value.trim() === "") continue;
+    if (field.kind === "number") attrs[field.key] = Number(el.value);
+    else if (field.kind === "bool") attrs[field.key] = el.value === "true";
+    else attrs[field.key] = el.value.trim();
+  }
+  return attrs;
+}
+
+function showFormError(form, message) {
+  const error = form.querySelector(".form-error");
+  error.textContent = message;
+  error.hidden = false;
+}
+
 // ---------- profil (tylko na urządzeniu) ----------
 
 let presets = null;
@@ -132,6 +221,9 @@ function route() {
   let arg = null;
   if (hash.startsWith("#/profil")) {
     view = "profile";
+  } else if (hash.startsWith("#/wlasciciel/")) {
+    view = "owner"; // właściciel nie musi wybierać profilu potrzeb
+    arg = decodeURIComponent(hash.slice("#/wlasciciel/".length));
   } else if (!profile()) {
     store.set("returnTo", hash); // po wyborze profilu wracamy tam, dokąd szedł użytkownik
     view = "profile";
@@ -139,12 +231,13 @@ function route() {
     view = "place";
     arg = decodeURIComponent(hash.slice("#/miejsce/".length));
   }
-  for (const name of ["profile", "search", "place"]) $(`#view-${name}`).hidden = name !== view;
+  for (const name of ["profile", "search", "place", "owner"]) $(`#view-${name}`).hidden = name !== view;
   $("#profile-chip-label").textContent = profileLabel();
   stopSpeaking();
   if (view === "profile") showProfile();
   if (view === "search") showSearch();
   if (view === "place") showPlace(arg);
+  if (view === "owner") showOwner(arg);
 }
 
 function focusHeading(id) {
@@ -347,7 +440,7 @@ function sourceLine(evidence) {
   return `${linked}${sample}, ${fmtDate(evidence.source.observed_at)}`;
 }
 
-function evidenceItem(evidence) {
+function evidenceItem(evidence, featureType) {
   const myVote = (store.get("votes") || {})[evidence.observation_id];
   const url = safeUrl(evidence.source.url);
   const verdict = VERDICT[evidence.verdict];
@@ -359,7 +452,7 @@ function evidenceItem(evidence) {
     <p class="muted">Potwierdzenia: ${evidence.confirmations} · Zaprzeczenia: ${evidence.denials}</p>
     <div class="vote" role="group" aria-label="Czy ta informacja się zgadza?">
       <button class="btn small" type="button" data-vote="confirm" data-obs="${esc(evidence.observation_id)}" aria-pressed="${myVote === "confirm"}">✓ Zgadza się</button>
-      <button class="btn small" type="button" data-vote="deny" data-obs="${esc(evidence.observation_id)}" aria-pressed="${myVote === "deny"}">✕ Nie zgadza się</button>
+      <button class="btn small" type="button" data-vote="deny" data-obs="${esc(evidence.observation_id)}" data-type="${esc(featureType)}" aria-pressed="${myVote === "deny"}" aria-expanded="false">✕ Nie zgadza się</button>
     </div>
   </li>`;
 }
@@ -379,7 +472,7 @@ function featureCard(feature) {
     <p class="source">Źródło: ${sourceLine(primary)} · <span class="status">${STATUS[feature.status]}</span></p>
     <details class="evidence" data-feature="${esc(feature.feature_id)}">
       <summary>Źródła (${feature.evidence.length}) i Twoja opinia</summary>
-      <ul class="evidence-list">${feature.evidence.map(evidenceItem).join("")}</ul>
+      <ul class="evidence-list">${feature.evidence.map((e) => evidenceItem(e, feature.type)).join("")}</ul>
     </details>
   </li>`;
 }
@@ -416,7 +509,21 @@ function renderPlace() {
     <h2 class="section-title">Miejsce i wejście</h2>
     ${atPlace.length
       ? `<ul class="features">${atPlace.map(featureCard).join("")}</ul>`
-      : `<p class="notice info">Nie mamy informacji o samym miejscu i jego wejściu. Jeśli tu jesteś, potwierdź lub popraw informacje z okolicy.</p>`}
+      : `<p class="notice info">Nie mamy informacji o samym miejscu i jego wejściu.</p>`}
+
+    <details class="card report" ${a.missing.length ? "open" : ""}>
+      <summary>Wiesz coś o tym miejscu? Uzupełnij dane</summary>
+      <form id="report-form">
+        <div class="form-grid">
+          <label for="report-type">Czego dotyczy informacja?</label>
+          <select id="report-type" name="type">${Object.entries(TYPE_LABEL).map(([value, text]) => `<option value="${value}">${esc(text)}</option>`).join("")}</select>
+        </div>
+        <div id="report-fields" class="form-grid">${fieldsHtml("entrance")}</div>
+        <p class="hint">Zgłoszenie będzie widoczne jako niepotwierdzone, dopóki nie potwierdzą go inne osoby.</p>
+        <p class="form-error" role="alert" hidden></p>
+        <button class="btn primary" type="submit">Wyślij informację</button>
+      </form>
+    </details>
 
     ${around.length ? `
       <h2 class="section-title">W okolicy</h2>
@@ -482,15 +589,46 @@ async function share() {
   } catch { /* użytkownik anulował */ }
 }
 
+function openCorrection(button) {
+  const item = button.closest(".evidence-item");
+  const existing = item.querySelector("form.correction");
+  if (existing) {
+    existing.remove();
+    button.setAttribute("aria-expanded", "false");
+    return;
+  }
+  const form = document.createElement("form");
+  form.className = "correction";
+  form.dataset.obs = button.dataset.obs;
+  form.dataset.type = button.dataset.type;
+  form.innerHTML = `
+    <p><strong>Jak jest naprawdę?</strong> (opcjonalnie - pomoże innym)</p>
+    <div class="form-grid">${fieldsHtml(button.dataset.type)}</div>
+    <p class="form-error" role="alert" hidden></p>
+    <div class="vote">
+      <button class="btn primary small" type="submit">Wyślij z poprawką</button>
+      <button class="btn small" type="button" data-action="deny-plain">Wyślij bez poprawki</button>
+    </div>`;
+  item.append(form);
+  button.setAttribute("aria-expanded", "true");
+  form.querySelector("select, input")?.focus();
+}
+
 async function vote(button) {
-  const observationId = button.dataset.obs;
-  const value = button.dataset.vote;
+  if (button.dataset.vote === "deny") {
+    openCorrection(button); // najpierw pytamy, jak jest naprawdę
+    return;
+  }
+  await sendVote(button.dataset.obs, "confirm", null, button);
+}
+
+async function sendVote(observationId, value, correctionAttrs, button, form = null) {
   const featureId = button.closest("details.evidence")?.dataset.feature;
   button.disabled = true;
   try {
     await api(`/observations/${encodeURIComponent(observationId)}/votes`, {
       method: "POST",
-      body: JSON.stringify({ voter_id: voterId(), value }),
+      body: JSON.stringify({ voter_id: voterId(), value, correction_attrs: correctionAttrs }),
     });
     const votes = store.get("votes") || {};
     votes[observationId] = value;
@@ -504,12 +642,113 @@ async function vote(button) {
       details.closest("details.around")?.setAttribute("open", "");
       details.querySelector(`[data-obs="${CSS.escape(observationId)}"][data-vote="${value}"]`)?.focus();
     }
-    announce("Dziękujemy! Zapisaliśmy Twoją opinię i przeliczyliśmy ocenę.");
+    announce(correctionAttrs
+      ? "Dziękujemy! Dodaliśmy Twoją poprawkę i przeliczyliśmy ocenę."
+      : "Dziękujemy! Zapisaliśmy Twoją opinię i przeliczyliśmy ocenę.");
   } catch (error) {
     button.disabled = false;
-    announce(error.message);
-    alert(error.message);
+    if (form) {
+      showFormError(form, error.message);
+    } else {
+      announce(error.message);
+      alert(error.message);
+    }
   }
+}
+
+async function onCorrectionSubmit(form, plain) {
+  const attrs = plain ? null : readAttrs(form, form.dataset.type);
+  if (attrs && !Object.keys(attrs).length) {
+    showFormError(form, "Uzupełnij co najmniej jedno pole albo wybierz „Wyślij bez poprawki”.");
+    return;
+  }
+  const button = form.querySelector(plain ? '[data-action="deny-plain"]' : 'button[type="submit"]');
+  await sendVote(form.dataset.obs, "deny", attrs, button, form);
+}
+
+async function onReportSubmit(form) {
+  const type = form.elements.type.value;
+  const attrs = readAttrs(form.querySelector("#report-fields"), type);
+  if (!Object.keys(attrs).length) {
+    showFormError(form, "Uzupełnij co najmniej jedno pole.");
+    return;
+  }
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    await api(`/places/${encodeURIComponent(current.id)}/reports`, {
+      method: "POST",
+      body: JSON.stringify({ type, attrs }),
+    });
+    current.assessment = await fetchAssessment(current.id);
+    renderPlace();
+    announce("Dziękujemy! Dodaliśmy Twoje zgłoszenie i przeliczyliśmy ocenę.");
+    focusHeading("#summary-title");
+  } catch (error) {
+    button.disabled = false;
+    showFormError(form, error.message);
+  }
+}
+
+// ---------- widok: właściciel obiektu ----------
+
+async function showOwner(placeId) {
+  const form = $("#owner-form");
+  form.reset(); // kod i dane z poprzedniego miejsca nie mogą przejść na kolejne
+  form.hidden = false;
+  form.dataset.place = placeId;
+  $("#owner-done").hidden = true;
+  $("#owner-error").hidden = true;
+  $("#owner-entrance").innerHTML = fieldsHtml("entrance");
+  $("#owner-steps").innerHTML = fieldsHtml("steps");
+  $("#owner-place").textContent = "Wczytuję miejsce…";
+  try {
+    const place = (await api("/places")).find((p) => p.id === placeId);
+    $("#owner-place").textContent = `Miejsce: ${place ? place.name : placeId}`;
+  } catch {
+    $("#owner-place").textContent = `Miejsce: ${placeId}`;
+  }
+  focusHeading("#owner-title");
+}
+
+async function onOwnerSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = $("#owner-error");
+  const fail = (message) => {
+    error.textContent = message;
+    error.hidden = false;
+  };
+  error.hidden = true;
+  const code = form.elements.code.value.trim();
+  const reports = [];
+  const entrance = readAttrs($("#owner-entrance"), "entrance");
+  if (Object.keys(entrance).length) reports.push({ type: "entrance", attrs: entrance });
+  const steps = readAttrs($("#owner-steps"), "steps");
+  if (Object.keys(steps).length) reports.push({ type: "steps", attrs: steps });
+  for (const box of form.querySelectorAll('input[name="amenity"]:checked')) {
+    reports.push({ type: "amenity", attrs: { kind: box.value } });
+  }
+  if (!code) return fail("Podaj kod właściciela.");
+  if (!reports.length) return fail("Uzupełnij co najmniej jedną informację.");
+  const placeId = form.dataset.place;
+  try {
+    await api(`/places/${encodeURIComponent(placeId)}/owner-reports`, {
+      method: "POST",
+      headers: { "X-Owner-Code": code },
+      body: JSON.stringify({ reports }),
+    });
+  } catch (e) {
+    return fail(e.message);
+  }
+  form.hidden = true;
+  const done = $("#owner-done");
+  done.hidden = false;
+  done.innerHTML = `
+    <p class="notice info" role="status"><strong>Dziękujemy!</strong> Zapisaliśmy informacje o obiekcie (${reports.length}).
+    Są widoczne jako potwierdzone dane od właściciela.</p>
+    <a class="btn primary block" href="#/miejsce/${encodeURIComponent(placeId)}">Zobacz kartę miejsca</a>`;
+  announce("Zapisano dane obiektu.");
 }
 
 // ---------- start ----------
@@ -522,10 +761,20 @@ function init() {
     const button = event.target.closest("button");
     if (!button) return;
     if (button.dataset.vote) vote(button);
+    else if (button.dataset.action === "deny-plain") onCorrectionSubmit(button.closest("form"), true);
     else if (button.dataset.action === "speak") speak(button);
     else if (button.dataset.action === "share") share();
     else if (button.dataset.action === "retry") route();
   });
+  $("#place-body").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (event.target.id === "report-form") onReportSubmit(event.target);
+    else if (event.target.classList.contains("correction")) onCorrectionSubmit(event.target, false);
+  });
+  $("#place-body").addEventListener("change", (event) => {
+    if (event.target.id === "report-type") $("#report-fields").innerHTML = fieldsHtml(event.target.value);
+  });
+  $("#owner-form").addEventListener("submit", onOwnerSubmit);
   window.addEventListener("hashchange", route);
   setupVoiceSearch();
   loadPresets().catch(() => null).finally(route);
