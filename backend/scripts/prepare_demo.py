@@ -75,6 +75,7 @@ def run(queries: list[str], preset: str, max_images: int, scan: bool) -> int:
                     failures += 1
             assessment = client.post(f"/places/{place_id}/assessment", json={"preset": preset}).json()
 
+        time.sleep(3)  # odstęp między miejscami - publiczny Overpass ma limit zapytań
         counts = ", ".join(f"{verdict}: {n}" for verdict, n in assessment["counts"].items() if n)
         print(f"   ocena: {assessment['summary']} ({counts or 'brak cech'})\n")
         prepared.append((place_id, place["name"], assessment["summary"]))

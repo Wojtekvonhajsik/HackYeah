@@ -326,3 +326,37 @@ def test_scan_with_rejected_token(monkeypatch):
     resp = client.post("/places/muzeum-kazimierz/scan")
     assert resp.status_code == 400
     assert "odrzuciło" in resp.json()["detail"]
+
+
+def test_scan_results_from_expanded_radius_appear_in_assessment(monkeypatch):
+    """Muzeum Narodowe: zdjęcia 30-50 m od punktu miejsca - wyniki muszą trafić do jego oceny."""
+    from datetime import date
+
+    from bezbarier.detection import ImageRef
+
+    def images_near(lat, lon, radius_m, limit):
+        if radius_m < 50:
+            return []
+        return [ImageRef(id="m-far", provider="mapillary", location={"lat": 50.0514, "lon": 19.944},
+                         heading=None, captured_at=date(2025, 7, 1))]  # ~45 m od muzeum
+
+    monkeypatch.setattr(main.mapillary, "images_near", images_near)
+    scan = client.post("/places/muzeum-kazimierz/scan").json()
+    assert scan["images_analyzed"] == 1
+    assessment = client.post("/places/muzeum-kazimierz/assessment", json={"preset": "step_free_strict", **TODAY}).json()
+    evidence_ids = {e["observation_id"] for f in assessment["features"] for e in f["evidence"]}
+    assert {"mapillary-m-far-0", "mapillary-m-far-1"} <= evidence_ids
+
+
+def test_osm_failure_reason_in_warning(monkeypatch):
+    far_away = [{**NOMINATIM_RESULT[0], "lat": "50.07", "lon": "19.95"}]
+    monkeypatch.setattr(main.osm, "search_places", lambda q: far_away)
+
+    def rate_limited(*args):
+        request = httpx.Request("POST", "https://overpass.test")
+        raise httpx.HTTPStatusError("429", request=request, response=httpx.Response(429, request=request))
+
+    monkeypatch.setattr(main.osm, "fetch_place_observations", rate_limited)
+    client.get("/places/search", params={"q": "kawiarnia"})
+    body = client.post("/places/osm-node-123/assessment", json={"preset": "step_free_strict", **TODAY}).json()
+    assert "serwer ogranicza liczbę zapytań" in body["warnings"][0]

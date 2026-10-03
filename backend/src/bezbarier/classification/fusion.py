@@ -26,12 +26,17 @@ def haversine_m(a: GeoPoint, b: GeoPoint) -> float:
 
 
 def _same_feature(f: Feature, obs: Observation, radius_m: float) -> bool:
-    if f.type != obs.type or f.place_id != obs.place_id:
+    if f.type != obs.type:
         return False
     if obs.type in KIND_SCOPED_TYPES and f.observations[0].attrs.get("kind") != obs.attrs.get("kind"):
         return False
-    if obs.type in PLACE_SCOPED_TYPES and obs.place_id is not None:
-        return True
+    if obs.type in PLACE_SCOPED_TYPES:
+        if f.place_id != obs.place_id:
+            return False
+        if obs.place_id is not None:
+            return True
+    # Pozostałe cechy (krawężnik, nawierzchnia...) łączymy po odległości, niezależnie od place_id -
+    # np. nawierzchnia z OSM i ze zdjęcia przypisanego do miejsca to ta sama rzecz
     return haversine_m(f.location, obs.location) <= radius_m
 
 

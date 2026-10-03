@@ -32,7 +32,7 @@ from ..classification import (
 from ..detection import Detector, ImageRef, detections_to_observations, get_detector
 from ..scan import ScanResult, scan_images
 from ..sources import mapillary, osm
-from ..storage import Place, SqliteRepository, Vote, VoteValue
+from ..storage import PLACE_RADIUS_M, Place, SqliteRepository, Vote, VoteValue
 from .security import limit_votes, require_admin
 
 BACKEND_DIR = Path(__file__).resolve().parents[3]
@@ -211,10 +211,14 @@ def _load_place_data(place: Place, today: date) -> tuple[list[str], list[str]]:
         return [], []
     try:
         repo.add_observations(osm.fetch_place_observations(place.id, place.location, place_osm))
-    except httpx.HTTPError:
+    except httpx.HTTPError as e:
+        reason = osm.describe_error(e)
+        logging.getLogger(__name__).warning("OSM dla %s nieudane: %r", place.id, e)
         if place.data_loaded:
-            return [], [f"Nie udało się odświeżyć danych z OpenStreetMap - pokazujemy dane z {place.data_loaded_at}."]
-        return ["Nie udało się pobrać danych z OpenStreetMap - pokazujemy tylko dane zapisane wcześniej."], []
+            return [], [
+                f"Nie udało się odświeżyć danych z OpenStreetMap ({reason}) - pokazujemy dane z {place.data_loaded_at}."
+            ]
+        return [f"Nie udało się pobrać danych z OpenStreetMap ({reason}) - pokazujemy tylko dane zapisane wcześniej."], []
     repo.mark_loaded(place.id, today)
     return [], []
 
@@ -247,7 +251,9 @@ def scan_place(place_id: str, max_images: int = 5, radius_m: float = 25) -> Scan
         if images or radius >= SCAN_MAX_RADIUS_M:
             break
         radius = min(radius * 2, SCAN_MAX_RADIUS_M)
-    result = scan_images(place_id, place.location, images, _detector(), repo.analyzed_images, max_images)
+    result = scan_images(
+        place_id, place.location, images, _detector(), repo.analyzed_images, max_images, link_beyond_m=PLACE_RADIUS_M
+    )
     repo.add_observations(result.observations)
     repo.save_analyzed_images()
     return result.model_copy(update={"radius_m": radius})

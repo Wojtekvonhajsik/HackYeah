@@ -17,6 +17,10 @@ from .classification.fusion import haversine_m
 from .classification.models import GeoPoint, Observation, Source, SourceType
 
 
+# Obserwacje bez place_id w tym promieniu od miejsca należą do jego otoczenia (chodnik, krawężnik)
+PLACE_RADIUS_M = 30
+
+
 class Place(BaseModel):
     id: str
     name: str
@@ -67,7 +71,7 @@ class InMemoryRepository:
         obs = self._observations.get(observation_id)
         return self._with_votes(obs) if obs is not None else None
 
-    def observations_for_place(self, place_id: str, radius_m: float = 30) -> list[Observation]:
+    def observations_for_place(self, place_id: str, radius_m: float = PLACE_RADIUS_M) -> list[Observation]:
         """Obserwacje przypisane do miejsca + te z najbliższego otoczenia (chodnik, krawężnik przed wejściem).
 
         Dane przykładowe trafiają tylko do miejsc przykładowych - nie mieszamy ich z prawdziwymi.
