@@ -114,6 +114,7 @@ a { color: var(--primary); }
   border-radius: 12px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
 }
+a.btn { text-decoration: none; }
 .btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 .btn.block { width: 100%; margin-top: 8px; }
 .btn.icon { padding: 0; }
@@ -218,6 +219,40 @@ details.evidence { margin-top: 8px; border-top: 1px solid var(--border); padding
 .vote { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
 details.around { margin-top: 20px; }
+
+/* ---------- zwięzłe karty, chipy, AI, GUS ---------- */
+.topbar-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.voice-toggle {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 44px; min-width: 44px; padding: 0 10px; flex: none;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--text); font: inherit; font-size: 0.85rem;
+}
+.voice-toggle[aria-pressed="false"] { opacity: 0.75; }
+.chips { list-style: none; padding: 0; margin: 4px 0 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--border); font-size: 0.9rem;
+}
+.tag-ai {
+  display: inline-flex; align-items: center; padding: 1px 7px; margin-right: 6px; border-radius: 6px; flex: none;
+  font-size: 0.75rem; font-weight: 800; letter-spacing: 0.04em; color: var(--amenity); background: var(--amenity-bg);
+  border: 1px solid var(--amenity);
+}
+.lead-reason { margin: 0 0 4px; }
+.meta { margin: 0; font-size: 0.88rem; color: var(--muted); }
+.small { font-size: 0.85rem; }
+.my-vote { margin: 6px 0 0; font-size: 0.95rem; }
+.link-btn {
+  background: none; border: 0; padding: 0 4px; min-height: 44px; color: var(--primary); font: inherit;
+  text-decoration: underline; cursor: pointer;
+}
+.stat-grid { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; grid-template-columns: 1fr; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.stat strong { display: block; font-size: 1.5rem; line-height: 1.2; color: var(--primary); }
+.stat span { font-size: 0.92rem; color: var(--muted); }
+.source-note { font-size: 0.82rem; color: var(--muted); margin: 6px 0 0; }
+.gus-context p { margin: 0; font-size: 0.95rem; }
+.notice.loading { display: flex; align-items: center; gap: 10px; }
+@media (min-width: 560px) { .stat-grid { grid-template-columns: repeat(3, 1fr); } }
 
 /* ---------- formularze zgłoszeń ---------- */
 .form-grid { display: grid; gap: 6px; }

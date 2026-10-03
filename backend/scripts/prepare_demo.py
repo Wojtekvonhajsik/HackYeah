@@ -53,7 +53,7 @@ def run(queries: list[str], preset: str, max_images: int, scan: bool) -> int:
         place_id = place["id"]
         print(f"   {place['name']} -> {place_id}")
 
-        assessment = client.post(f"/places/{place_id}/assessment", json={"preset": preset}).json()
+        assessment = client.post(f"/places/{place_id}/assessment", params={"wait": "true"}, json={"preset": preset}).json()
         osm_count = sum(1 for f in assessment["features"] for e in f["evidence"] if e["source"]["type"] == "osm")
         print(f"   OSM: {osm_count} informacji" + _warnings(assessment))
 
@@ -73,7 +73,7 @@ def run(queries: list[str], preset: str, max_images: int, scan: bool) -> int:
                 for error in result["errors"]:
                     print(f"   BŁĄD: {error}")
                     failures += 1
-            assessment = client.post(f"/places/{place_id}/assessment", json={"preset": preset}).json()
+            assessment = client.post(f"/places/{place_id}/assessment", params={"wait": "true"}, json={"preset": preset}).json()
 
         time.sleep(3)  # odstęp między miejscami - publiczny Overpass ma limit zapytań
         counts = ", ".join(f"{verdict}: {n}" for verdict, n in assessment["counts"].items() if n)

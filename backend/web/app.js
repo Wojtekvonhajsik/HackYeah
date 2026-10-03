@@ -312,7 +312,41 @@ function placeItem(place) {
     <strong>${esc(place.name)}</strong>${details ? `<small>${esc(details)}</small>` : ""}</a></li>`;
 }
 
+// ---------- dane GUS ----------
+
+let cityStats = null;
+const numberPl = new Intl.NumberFormat("pl-PL");
+const fmtPct = (pct) => `${String(pct).replace(".", ",")}%`;
+
+async function loadCityStats() {
+  if (!cityStats) cityStats = await api("/stats/city");
+  return cityStats;
+}
+
+async function renderCityStats() {
+  const box = $("#city-stats");
+  try {
+    const stats = await loadCityStats();
+    const pick = (key) => stats.items.find((i) => i.key === key);
+    const tiles = [
+      [pick("disabled"), (i) => `${numberPl.format(i.value)}`, (i) => `osób z niepełnosprawnościami (${fmtPct(i.share_pct)} mieszkańców, spis ${i.year})`],
+      [pick("post_working_age"), (i) => `${numberPl.format(i.value)}`, (i) => `osób w wieku poprodukcyjnym (${fmtPct(i.share_pct)}, ${i.year})`],
+      [pick("lodging_ramp"), (i) => fmtPct(i.share_pct), (i) => `obiektów noclegowych ma pochylnię (${i.year})`],
+    ].filter(([item]) => item);
+    box.innerHTML = `
+      <h2 class="section-title">Dla kogo to jest</h2>
+      <ul class="stat-grid">${tiles.map(([item, big, small]) => `
+        <li class="stat"><strong>${esc(big(item))}</strong><span>${esc(small(item))}</span></li>`).join("")}
+      </ul>
+      <p class="source-note">Kraków. Źródło: <a href="${esc(stats.url)}" target="_blank" rel="noopener">${esc(stats.source)}</a>,
+        licencja ${esc(stats.license)}${stats.from_snapshot ? `, kopia z ${fmtDate(stats.retrieved_at)} (GUS chwilowo niedostępny)` : ""}.</p>`;
+  } catch {
+    box.innerHTML = ""; // kontekst - bez niego aplikacja działa normalnie
+  }
+}
+
 async function showSearch() {
+  renderCityStats();
   const recent = store.get("recent") || [];
   const title = document.querySelector("#view-search .section-title");
   const list = $("#recent");
@@ -391,23 +425,26 @@ async function fetchAssessment(id) {
   });
 }
 
+let pollTimer = null;
+
 async function showPlace(id) {
+  clearTimeout(pollTimer);
   $("#place-title").textContent = "Sprawdzam miejsce…";
   $("#place-address").textContent = "";
-  $("#place-body").innerHTML = loadingHtml(
-    "Sprawdzam miejsce. Za pierwszym razem pobieramy dane z OpenStreetMap - może to potrwać do 30 sekund.",
-  );
+  $("#place-body").innerHTML = loadingHtml("Sprawdzam miejsce…");
   announce("Sprawdzam miejsce…");
   try {
     const assessment = await fetchAssessment(id);
     const places = await api("/places");
     const place = places.find((p) => p.id === id) || { id, name: "Miejsce" };
-    if (location.hash !== `#/miejsce/${encodeURIComponent(id)}`) return; // użytkownik zdążył przejść dalej
+    if (!isShowing(id)) return; // użytkownik zdążył przejść dalej
     current = { id, place, assessment };
+    await loadCityStats().catch(() => null); // kontekst GUS dla hoteli - opcjonalny
     rememberRecent(place);
     renderPlace();
     announce(`${place.name}: ${SUMMARY[assessment.summary].title}.`);
     focusHeading("#place-title");
+    pollWhilePending(id, 0);
   } catch (error) {
     $("#place-title").textContent = "Nie udało się sprawdzić miejsca";
     $("#place-body").innerHTML = `
@@ -416,20 +453,47 @@ async function showPlace(id) {
   }
 }
 
-function confidenceWord(pct) {
-  if (pct >= 60) return "wysoka";
-  if (pct >= 30) return "średnia";
-  return "niska";
+const isShowing = (id) => location.hash === `#/miejsce/${encodeURIComponent(id)}`;
+
+// Dane z OSM dociągają się w tle - pokazujemy ocenę od razu i odświeżamy, gdy dojdą
+function pollWhilePending(id, attempt) {
+  if (!current.assessment.pending_sources.length) return;
+  if (attempt >= 15) return; // ok. 45 s - dalej backend zgłosi błąd źródła przy kolejnym wejściu
+  pollTimer = setTimeout(async () => {
+    if (!isShowing(id)) return;
+    try {
+      const assessment = await fetchAssessment(id);
+      if (!isShowing(id)) return;
+      current.assessment = assessment;
+      if (!assessment.pending_sources.length) {
+        renderPlace();
+        const failed = assessment.warnings.some((w) => w.includes("OpenStreetMap"));
+        announce(failed
+          ? "Nie udało się pobrać danych z OpenStreetMap - pokazujemy dane zapisane wcześniej."
+          : "Dociągnęliśmy dane z OpenStreetMap - ocena zaktualizowana.");
+        return;
+      }
+    } catch { /* spróbujemy ponownie */ }
+    pollWhilePending(id, attempt + 1);
+  }, 3000);
 }
 
-function meter(pct, label) {
-  if (pct === null || pct === undefined) {
-    return `<div class="meter"><div class="meter-label"><span>${label}</span><span>brak danych</span></div></div>`;
-  }
-  return `<div class="meter">
-    <div class="meter-label"><span>${label}</span><strong>${pct}% (${confidenceWord(pct)})</strong></div>
-    <div class="meter-bar" aria-hidden="true"><div class="meter-fill" style="width:${Number(pct)}%"></div></div>
-  </div>`;
+const confidenceWord = (pct) => (pct >= 60 ? "wysoka" : pct >= 30 ? "średnia" : "niska");
+
+function confidenceText(pct) {
+  return pct === null || pct === undefined ? "pewność: brak danych" : `pewność ${pct}% (${confidenceWord(pct)})`;
+}
+
+function pluralInfo(n) {
+  if (n === 1) return "informacja";
+  const lastTwo = n % 100;
+  return n % 10 >= 2 && n % 10 <= 4 && (lastTwo < 12 || lastTwo > 14) ? "informacje" : "informacji";
+}
+
+const usesAi = (feature) => feature.evidence.some((e) => e.source.type === "ai_detection");
+
+function aiTag() {
+  return `<span class="tag-ai" title="Informacja wykryta automatycznie przez AI na zdjęciu ulicy">AI<span class="visually-hidden"> - analiza zdjęcia</span></span>`;
 }
 
 function sourceLine(evidence) {
@@ -440,96 +504,144 @@ function sourceLine(evidence) {
   return `${linked}${sample}, ${fmtDate(evidence.source.observed_at)}`;
 }
 
-function evidenceItem(evidence, featureType) {
+function voteControls(evidence, featureType) {
   const myVote = (store.get("votes") || {})[evidence.observation_id];
-  const url = safeUrl(evidence.source.url);
+  const obs = esc(evidence.observation_id);
+  if (myVote) {
+    // po oddaniu głosu nie pokazujemy obu przycisków - żeby nie dało się przypadkiem zagłosować odwrotnie
+    return `<p class="my-vote">Twój głos: <strong>${myVote === "confirm" ? "✓ zgadza się" : "✕ nie zgadza się"}</strong>
+      · <button class="link-btn" type="button" data-action="change-vote" data-obs="${obs}">zmień</button></p>`;
+  }
+  return `<div class="vote" role="group" aria-label="Czy ta informacja się zgadza?">
+      <button class="btn small" type="button" data-vote="confirm" data-obs="${obs}">✓ Zgadza się</button>
+      <button class="btn small" type="button" data-vote="deny" data-obs="${obs}" data-type="${esc(featureType)}" aria-expanded="false">✕ Nie zgadza się</button>
+    </div>`;
+}
+
+function evidenceItem(evidence, featureType) {
   const verdict = VERDICT[evidence.verdict];
+  const isAi = evidence.source.type === "ai_detection";
   return `<li class="evidence-item">
-    <p><strong>${sourceLine(evidence)}</strong> · ${STATUS[evidence.status]}</p>
+    <p>${isAi ? aiTag() : ""}<strong>${sourceLine(evidence)}</strong> · ${STATUS[evidence.status]}</p>
     <p>${evidence.verdict === "unknown" ? "" : `${verdict.label}: `}${esc(cap(evidence.reasons.join("; ")))}</p>
-    ${evidence.note ? `<p class="muted">Opis: ${esc(evidence.note)}</p>` : ""}
-    <p class="muted">${esc(evidence.source.name)}${evidence.source.license ? ` · licencja ${esc(evidence.source.license)}` : ""}${url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener">zobacz źródło</a>` : ""}</p>
-    <p class="muted">Potwierdzenia: ${evidence.confirmations} · Zaprzeczenia: ${evidence.denials}</p>
-    <div class="vote" role="group" aria-label="Czy ta informacja się zgadza?">
-      <button class="btn small" type="button" data-vote="confirm" data-obs="${esc(evidence.observation_id)}" aria-pressed="${myVote === "confirm"}">✓ Zgadza się</button>
-      <button class="btn small" type="button" data-vote="deny" data-obs="${esc(evidence.observation_id)}" data-type="${esc(featureType)}" aria-pressed="${myVote === "deny"}" aria-expanded="false">✕ Nie zgadza się</button>
-    </div>
+    ${evidence.note ? `<p class="muted">„${esc(evidence.note)}”</p>` : ""}
+    <p class="muted small">${esc(evidence.source.name)}${evidence.source.license ? ` · ${esc(evidence.source.license)}` : ""}
+      · <span aria-label="potwierdzenia">✓ ${evidence.confirmations}</span> <span aria-label="zaprzeczenia">✕ ${evidence.denials}</span></p>
+    ${voteControls(evidence, featureType)}
   </li>`;
 }
 
 function featureCard(feature) {
   const verdict = VERDICT[feature.verdict];
   const primary = feature.evidence.find((e) => e.observation_id === feature.primary_observation_id) || feature.evidence[0];
+  const [mainReason, ...moreReasons] = feature.reasons;
+  const meta = [
+    feature.type === "amenity" ? null : confidenceText(feature.confidence_pct),
+    sourceLine(primary),
+    `<span class="status">${STATUS[feature.status]}</span>`,
+  ].filter(Boolean).join(" · ");
   return `<li class="card feature" id="f-${esc(feature.feature_id)}">
     <div class="feature-head">
       <span class="verdict-icon v-${feature.verdict}" aria-hidden="true">${verdict.symbol}</span>
       <h3>${esc(cap(feature.label))}</h3>
+      ${usesAi(feature) ? aiTag() : ""}
       <span class="badge v-${feature.verdict}">${verdict.label}</span>
     </div>
-    <ul class="reasons">${feature.reasons.map((r) => `<li>${esc(cap(r))}</li>`).join("")}</ul>
-    ${feature.type === "amenity" ? "" : meter(feature.confidence_pct, "Pewność")}
-    ${feature.conflict ? `<p class="conflict">Źródła podają różne informacje - pokazujemy ostrożniejszą.</p>` : ""}
-    <p class="source">Źródło: ${sourceLine(primary)} · <span class="status">${STATUS[feature.status]}</span></p>
+    <p class="lead-reason">${esc(cap(mainReason || ""))}</p>
+    <p class="meta">${meta}</p>
+    ${feature.conflict ? `<p class="conflict">Źródła się nie zgadzają - pokazujemy ostrożniejszą wersję.</p>` : ""}
     <details class="evidence" data-feature="${esc(feature.feature_id)}">
-      <summary>Źródła (${feature.evidence.length}) i Twoja opinia</summary>
+      <summary>Szczegóły i źródła (${feature.evidence.length})</summary>
+      ${moreReasons.length ? `<ul class="reasons">${moreReasons.map((r) => `<li>${esc(cap(r))}</li>`).join("")}</ul>` : ""}
       <ul class="evidence-list">${feature.evidence.map((e) => evidenceItem(e, feature.type)).join("")}</ul>
     </details>
   </li>`;
 }
+
+function surroundingsSummary(around) {
+  const notable = { blocker: "przeszkoda", uncertain: "do sprawdzenia", difficult: "utrudnienie" };
+  const counts = new Map();
+  for (const f of around) {
+    const key = notable[f.verdict] ? `${f.label} (${notable[f.verdict]})` : f.verdict === "amenity" ? f.reasons[0] : null;
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts].map(([key, n]) => (n > 1 ? `${key} ×${n}` : key)).join(", ");
+}
+
+const LODGING_KINDS = ["tourism:hotel", "tourism:hostel", "tourism:guest_house", "tourism:motel", "tourism:apartment"];
+
+function lodgingContext() {
+  if (!LODGING_KINDS.includes(current.place.kind) || !cityStats) return "";
+  const pick = (key) => cityStats.items.find((i) => i.key === key);
+  const lines = ["lodging_elevator", "lodging_ramp", "lodging_auto_door"].map(pick).filter(Boolean);
+  if (!lines.length) return "";
+  return `<aside class="card gus-context" aria-label="Kontekst z danych GUS">
+    <p><strong>Noclegi w mieście:</strong> ${lines.map((i) => `${esc(shortLodging(i.key))} ma ${fmtPct(i.share_pct)} obiektów`).join(", ")}
+    (GUS, ${lines[0].year}).</p>
+  </aside>`;
+}
+
+const shortLodging = (key) => ({ lodging_elevator: "windę", lodging_ramp: "pochylnię", lodging_auto_door: "drzwi automatyczne" })[key];
 
 function renderPlace() {
   const { place, assessment: a } = current;
   const summary = SUMMARY[a.summary];
   const atPlace = a.features.filter((f) => f.scope === "place");
   const around = a.features.filter((f) => f.scope === "surroundings");
+  const pending = a.pending_sources.length > 0;
+  const warnings = a.warnings.filter((w) => !w.startsWith("Pobieramy dane"));
+  const aiCount = a.features.filter(usesAi).length;
+  const aroundText = surroundingsSummary(around);
   $("#place-title").textContent = place.name;
   $("#place-address").textContent = shortAddress(place.address);
   $("#place-body").innerHTML = `
-    ${a.contains_sample_data ? `<p class="notice sample"><strong>Dane przykładowe.</strong> Ta ocena zawiera dane demonstracyjne, które nie opisują rzeczywistego obiektu.</p>` : ""}
-    ${a.warnings.map((w) => `<p class="notice warn" role="alert">${esc(w)}</p>`).join("")}
+    ${a.contains_sample_data ? `<p class="notice sample"><strong>Dane przykładowe</strong> - nie opisują rzeczywistego obiektu.</p>` : ""}
+    ${pending ? `<p class="notice info loading"><span class="spinner" aria-hidden="true"></span>Dociągamy dane z OpenStreetMap - ocena uzupełni się sama.</p>` : ""}
+    ${warnings.map((w) => `<p class="notice warn" role="alert">${esc(w)}</p>`).join("")}
 
     <section class="card summary" data-summary="${esc(a.summary)}" aria-labelledby="summary-title">
       <h2 id="summary-title"><span class="verdict-icon v-${summary.verdict}" aria-hidden="true">${VERDICT[summary.verdict].symbol}</span>${esc(summary.title)}</h2>
-      <p>${esc(a.summary_text)}</p>
-      ${meter(a.summary_confidence_pct, "Pewność oceny")}
-      <p class="meter-note">Pewność rośnie, gdy źródła się zgadzają, i spada, gdy dane są stare lub sprzeczne.</p>
-      ${a.missing.length ? `<div class="notice info"><strong>Czego nie wiemy:</strong><ul>${a.missing.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>` : ""}
-      <p class="meter-note">Dla profilu: ${esc(profileLabel())} · <a href="#/profil">zmień</a></p>
+      <ul class="chips">
+        <li class="chip">${cap(confidenceText(a.summary_confidence_pct))}</li>
+        <li class="chip">${aiCount ? `${aiTag()} analiza zdjęć AI: ${aiCount} ${pluralInfo(aiCount)}` : "bez analizy zdjęć AI"}</li>
+      </ul>
+      ${a.missing.length ? `<p><strong>Brakuje:</strong> ${esc(a.missing.join(", "))}</p>` : ""}
+      ${aroundText ? `<p class="muted">W okolicy: ${esc(aroundText)}</p>` : ""}
       <div class="summary-actions">
-        <button class="btn small" type="button" data-action="speak" aria-pressed="false"><span aria-hidden="true">🔊</span> Odczytaj na głos</button>
+        <button class="btn small" type="button" data-action="speak" aria-pressed="false"><span aria-hidden="true">🔊</span> Odczytaj</button>
         <button class="btn small" type="button" data-action="share">Udostępnij</button>
+        <a class="btn small" href="#/profil" aria-label="Zmień profil: ${esc(profileLabel())}">Profil</a>
       </div>
     </section>
 
     <div class="map-wrap">
       <div id="map" role="img" aria-label="Mapa miejsca i okolicy. Wszystkie informacje z mapy są w liście poniżej."></div>
-      <p class="map-note">Mapa to uzupełnienie - pełna informacja jest w liście poniżej.</p>
     </div>
 
     <h2 class="section-title">Miejsce i wejście</h2>
     ${atPlace.length
       ? `<ul class="features">${atPlace.map(featureCard).join("")}</ul>`
-      : `<p class="notice info">Nie mamy informacji o samym miejscu i jego wejściu.</p>`}
+      : `<p class="notice info">Brak informacji o samym miejscu.</p>`}
 
-    <details class="card report" ${a.missing.length ? "open" : ""}>
-      <summary>Wiesz coś o tym miejscu? Uzupełnij dane</summary>
+    ${lodgingContext()}
+
+    <details class="card report" ${a.missing.length && !pending ? "open" : ""}>
+      <summary>Wiesz coś o tym miejscu? Uzupełnij</summary>
       <form id="report-form">
         <div class="form-grid">
-          <label for="report-type">Czego dotyczy informacja?</label>
+          <label for="report-type">Czego dotyczy?</label>
           <select id="report-type" name="type">${Object.entries(TYPE_LABEL).map(([value, text]) => `<option value="${value}">${esc(text)}</option>`).join("")}</select>
         </div>
         <div id="report-fields" class="form-grid">${fieldsHtml("entrance")}</div>
-        <p class="hint">Zgłoszenie będzie widoczne jako niepotwierdzone, dopóki nie potwierdzą go inne osoby.</p>
+        <p class="hint">Widoczne jako niepotwierdzone, dopóki inni nie potwierdzą.</p>
         <p class="form-error" role="alert" hidden></p>
-        <button class="btn primary" type="submit">Wyślij informację</button>
+        <button class="btn primary" type="submit">Wyślij</button>
       </form>
     </details>
 
     ${around.length ? `
-      <h2 class="section-title">W okolicy</h2>
-      <p class="hint">Rzeczy w promieniu ok. 30 m - mogą istnieć inne drogi dojścia.</p>
-      <details class="around card" ${atPlace.length ? "" : "open"}>
-        <summary>Pokaż informacje z okolicy (${around.length})</summary>
+      <details class="around card">
+        <summary>W okolicy (${around.length}) - mogą istnieć inne drogi dojścia</summary>
         <ul class="features">${around.map(featureCard).join("")}</ul>
       </details>` : ""}
   `;
@@ -560,6 +672,30 @@ function renderMap() {
 }
 
 // ---------- głos, udostępnianie, głosowanie ----------
+
+// Czytanie na głos przy wyborze opcji (profil, rodzaj zgłoszenia). Włącznik w nagłówku, domyślnie włączone.
+const voiceOn = () => store.get("voice") !== false;
+
+function updateVoiceToggle() {
+  const button = $("#voice-toggle");
+  button.setAttribute("aria-pressed", String(voiceOn()));
+  button.querySelector(".voice-state").textContent = voiceOn() ? "wł." : "wył.";
+}
+
+function toggleVoice() {
+  store.set("voice", !voiceOn());
+  updateVoiceToggle();
+  if (!voiceOn()) stopSpeaking();
+  speakText("Czytanie na głos włączone.");
+}
+
+function speakText(text) {
+  if (!voiceOn() || !("speechSynthesis" in window) || !text) return;
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "pl-PL";
+  speechSynthesis.speak(utterance);
+}
 
 function stopSpeaking() {
   if ("speechSynthesis" in window) speechSynthesis.cancel();
@@ -635,13 +771,7 @@ async function sendVote(observationId, value, correctionAttrs, button, form = nu
     store.set("votes", votes);
     current.assessment = await fetchAssessment(current.id);
     renderPlace();
-    // przywracamy miejsce, w którym był użytkownik
-    const details = document.querySelector(`details.evidence[data-feature="${CSS.escape(featureId || "")}"]`);
-    if (details) {
-      details.open = true;
-      details.closest("details.around")?.setAttribute("open", "");
-      details.querySelector(`[data-obs="${CSS.escape(observationId)}"][data-vote="${value}"]`)?.focus();
-    }
+    reopenEvidence(featureId, `[data-action="change-vote"][data-obs="${CSS.escape(observationId)}"]`);
     announce(correctionAttrs
       ? "Dziękujemy! Dodaliśmy Twoją poprawkę i przeliczyliśmy ocenę."
       : "Dziękujemy! Zapisaliśmy Twoją opinię i przeliczyliśmy ocenę.");
@@ -654,6 +784,26 @@ async function sendVote(observationId, value, correctionAttrs, button, form = nu
       alert(error.message);
     }
   }
+}
+
+// Po przerysowaniu karty wracamy do miejsca, w którym był użytkownik (rozwinięte źródła, fokus)
+function reopenEvidence(featureId, focusSelector) {
+  const details = document.querySelector(`details.evidence[data-feature="${CSS.escape(featureId || "")}"]`);
+  if (!details) return;
+  details.open = true;
+  details.closest("details.around")?.setAttribute("open", "");
+  details.querySelector(focusSelector)?.focus();
+}
+
+function changeVote(button) {
+  // zmiana zdania: znów pokazujemy oba przyciski; nowy głos zastąpi poprzedni (jeden głos na urządzenie)
+  const observationId = button.dataset.obs;
+  const featureId = button.closest("details.evidence")?.dataset.feature;
+  const votes = store.get("votes") || {};
+  delete votes[observationId];
+  store.set("votes", votes);
+  renderPlace();
+  reopenEvidence(featureId, `[data-vote="confirm"][data-obs="${CSS.escape(observationId)}"]`);
 }
 
 async function onCorrectionSubmit(form, plain) {
@@ -762,6 +912,7 @@ function init() {
     if (!button) return;
     if (button.dataset.vote) vote(button);
     else if (button.dataset.action === "deny-plain") onCorrectionSubmit(button.closest("form"), true);
+    else if (button.dataset.action === "change-vote") changeVote(button);
     else if (button.dataset.action === "speak") speak(button);
     else if (button.dataset.action === "share") share();
     else if (button.dataset.action === "retry") route();
@@ -772,8 +923,17 @@ function init() {
     else if (event.target.classList.contains("correction")) onCorrectionSubmit(event.target, false);
   });
   $("#place-body").addEventListener("change", (event) => {
-    if (event.target.id === "report-type") $("#report-fields").innerHTML = fieldsHtml(event.target.value);
+    if (event.target.id === "report-type") {
+      $("#report-fields").innerHTML = fieldsHtml(event.target.value);
+      speakText(TYPE_LABEL[event.target.value]);
+    }
   });
+  $("#preset-list").addEventListener("change", () => {
+    const p = presets?.[selectedPreset()];
+    if (p) speakText(`${p.label}. ${p.description}`);
+  });
+  $("#voice-toggle").addEventListener("click", toggleVoice);
+  updateVoiceToggle();
   $("#owner-form").addEventListener("submit", onOwnerSubmit);
   window.addEventListener("hashchange", route);
   setupVoiceSearch();

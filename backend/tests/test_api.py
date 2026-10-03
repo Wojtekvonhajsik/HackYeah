@@ -286,6 +286,7 @@ def _good_entrance(place_id, location, place_osm):
 
 
 def test_osm_data_refreshed_after_30_days(monkeypatch):
+    monkeypatch.setattr(main, "PREFETCH_RESULTS", 0)  # liczymy pobrania tylko z ocen
     far_away = [{**NOMINATIM_RESULT[0], "lat": "50.07", "lon": "19.95"}]
     monkeypatch.setattr(main.osm, "search_places", lambda q: far_away)
     calls = []
@@ -308,6 +309,7 @@ def test_osm_data_refreshed_after_30_days(monkeypatch):
 
 
 def test_failed_refresh_keeps_old_data_without_downgrading(monkeypatch):
+    monkeypatch.setattr(main, "PREFETCH_RESULTS", 0)  # liczymy pobrania tylko z ocen
     far_away = [{**NOMINATIM_RESULT[0], "lat": "50.07", "lon": "19.95"}]
     monkeypatch.setattr(main.osm, "search_places", lambda q: far_away)
     monkeypatch.setattr(main.osm, "fetch_place_observations", _good_entrance)

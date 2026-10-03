@@ -98,6 +98,7 @@ class Assessment(BaseModel):
     contains_sample_data: bool
     contains_unverified: bool
     warnings: list[str] = Field(default_factory=list)  # np. niedostępne źródło danych
+    pending_sources: list[str] = Field(default_factory=list)  # źródła wciąż pobierane w tle (np. OpenStreetMap)
 
     @computed_field  # liczone przy serializacji, więc obejmuje też ostrzeżenia dopisane po assess()
     @property

@@ -72,6 +72,11 @@ głosy = (potwierdzenia + 1) / (potwierdzenia + zaprzeczenia + 1)
 | OpenStreetMap (Nominatim) | wyszukiwanie miejsc w Krakowie | ODbL | `GET /places/search`, na żądanie |
 | OpenStreetMap (Overpass) | krawężniki, przejścia, wejścia, nawierzchnia, schody, ławki, toalety w promieniu 30 m | ODbL | przy pierwszej ocenie miejsca, potem z pamięci |
 | Mapillary | zdjęcia ulic do detekcji AI | CC-BY-SA 4.0 | `sources/mapillary.py` |
+| GUS - Bank Danych Lokalnych | statystyki miasta: osoby z niepełnosprawnościami (NSP 2021), osoby w wieku poprodukcyjnym, obiekty noclegowe z windą / pochylnią / drzwiami automatycznymi | CC BY 4.0 | `GET /stats/city` (`sources/gus.py`), pamięć 12 h, przy niedostępności kopia `data/gus_<jednostka>.json` |
+
+Dane GUS są zagregowane dla gminy, więc nie wpływają na ocenę pojedynczego miejsca - pokazują skalę potrzeb
+(kontekst dla użytkownika i miasta) oraz stan bazy noclegowej (argument dla właścicieli obiektów). Inne miasto:
+`GUS_UNIT_ID` = identyfikator jednostki w BDL.
 | Zgłoszenia użytkowników | potwierdzenia, poprawki | - | `POST /observations/{id}/votes` |
 
 Gdy źródło jest niedostępne, ocena nadal działa na danych zapisanych wcześniej, a odpowiedź zawiera

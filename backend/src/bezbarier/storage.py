@@ -30,6 +30,7 @@ class Place(BaseModel):
     address: str | None = None
     osm_type: str | None = None   # "node" / "way" / "relation"
     osm_id: int | None = None
+    kind: str | None = None       # rodzaj obiektu z OSM, np. "tourism:hotel", "amenity:theatre"
     sample: bool = False
     data_loaded: bool = True      # False = dane z OSM pobierzemy przy pierwszej ocenie
     data_loaded_at: date | None = None  # kiedy ostatnio pobrano dane z OSM (do odświeżania)

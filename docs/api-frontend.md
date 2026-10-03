@@ -40,7 +40,9 @@ bo miejsca `osm-*` backend odtwarza sam, a dane trzyma w bazie.
 
 ### 3. Ocena - `POST /places/{id}/assessment`
 
-Body: `{"preset": "step_free_strict"}`. **Pierwsze wywołanie dla miejsca może trwać do ~30 s** (pobieranie z OpenStreetMap) - pokaż wskaźnik ładowania.
+Body: `{"preset": "step_free_strict"}`. Odpowiedź wraca od razu. Jeśli dane z OpenStreetMap jeszcze się pobierają
+(w tle, startują już przy wyszukiwaniu), `pending_sources` = `["OpenStreetMap"]` - pokaż ocenę z informacją
+„dociągamy dane” i pytaj ponownie co ~3 s, aż lista będzie pusta. (`?wait=true` czeka na OSM - tylko dla skryptów.)
 
 | Pole | Co z nim zrobić |
 |---|---|
@@ -52,6 +54,16 @@ Body: `{"preset": "step_free_strict"}`. **Pierwsze wywołanie dla miejsca może 
 | `counts`, `surroundings_counts` | liczba cech wg werdyktu - osobno dla miejsca i okolicy |
 | `missing[]` | czego nie wiemy - pokaż wyraźnie |
 | `warnings[]` | np. niedostępne źródło danych - pokaż jako komunikat |
+| `pending_sources[]` | źródła wciąż pobierane w tle - odpytuj ponownie |
+
+Informacja pochodzi z analizy zdjęcia przez AI, gdy `evidence[].source.type == "ai_detection"` - oznacz ją wyraźnie (np. „AI”).
+
+### Statystyki miasta - `GET /stats/city`
+
+Dane GUS (Bank Danych Lokalnych, CC BY 4.0): `items[]` z `key`, `label`, `value`, `year`, `share_pct`, `share_of`
+(np. `disabled` = osoby z niepełnosprawnościami, `post_working_age`, `lodging_ramp` = % obiektów noclegowych z pochylnią).
+`from_snapshot: true` = GUS niedostępny, pokazujemy zapisaną kopię. Oznacz źródło: „GUS, Bank Danych Lokalnych”.
+`Place.kind` (np. `tourism:hotel`) pozwala pokazać kontekst noclegowy przy hotelach.
 | `contains_sample_data` | `true` -> baner „dane przykładowe” |
 | `contains_unverified` | `true` -> informacja, że część danych jest niepotwierdzona |
 

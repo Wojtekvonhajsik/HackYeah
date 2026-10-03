@@ -12,7 +12,8 @@ from __future__ import annotations
 import math
 import os
 import re
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
 from datetime import date, datetime
 from typing import Any
 
@@ -27,8 +28,7 @@ PUBLIC_OVERPASS_URLS = [
     "https://overpass.private.coffee/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
-OVERPASS_TIMEOUT = httpx.Timeout(30, connect=8)
-# Łączny limit na wszystkie serwery i ponowienia - użytkownik czeka na ocenę, lepiej ostrzeżenie niż minuta czekania
+# Łączny limit czasu na zapytanie (wszystkie serwery równolegle)
 OVERPASS_TOTAL_BUDGET_S = 35
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup"
@@ -261,21 +261,30 @@ def parse_overpass(
 # ---------- zapytania sieciowe ----------
 
 def overpass_query(lat: float, lon: float, radius_m: float, place_osm: tuple[str, int] | None = None) -> str:
-    around = f"(around:{radius_m:g},{lat},{lon})"
+    # Prostokąt zamiast okręgu (around) - dla Overpass dużo tańszy, więc odpowiedź przychodzi szybciej
+    d_lat = radius_m / 111_320
+    d_lon = radius_m / (111_320 * math.cos(math.radians(lat)))
+    bbox = f"({lat - d_lat:.6f},{lon - d_lon:.6f},{lat + d_lat:.6f},{lon + d_lon:.6f})"
     place = f"{place_osm[0]}(id:{place_osm[1]});" if place_osm else ""
     return f"""[out:json][timeout:25];
 (
   {place}
-  node{around}["barrier"="kerb"];
-  node{around}["kerb"];
-  node{around}["highway"="crossing"];
-  node{around}["entrance"];
-  node{around}["amenity"="bench"];
-  node{around}["amenity"="toilets"];
-  node{around}["highway"="elevator"];
-  way{around}["highway"~"{FOOTWAY_RE}"];
+  node{bbox}["barrier"="kerb"];
+  node{bbox}["kerb"];
+  node{bbox}["highway"="crossing"];
+  node{bbox}["entrance"];
+  node{bbox}["amenity"~"^(bench|toilets)$"];
+  node{bbox}["highway"="elevator"];
+  way{bbox}["highway"~"{FOOTWAY_RE}"];
 );
 out center meta;"""
+
+
+def _post_overpass(url: str, query: str, timeout_s: float) -> dict[str, Any]:
+    timeout = httpx.Timeout(timeout_s, connect=min(8, timeout_s))
+    resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def fetch_place_observations(
@@ -285,43 +294,32 @@ def fetch_place_observations(
     radius_m: float = 30,
     today: date | None = None,
 ) -> list[Observation]:
+    """Pyta wszystkie serwery Overpass naraz i bierze pierwszą udaną odpowiedź.
+
+    Publiczne serwery bywają przeciążone na zmianę - równoległe zapytanie skraca czekanie do czasu
+    najszybszego z nich, a łączny limit OVERPASS_TOTAL_BUDGET_S chroni przed minutowym czekaniem.
+    """
     today = today or date.today()
     query = overpass_query(location.lat, location.lon, radius_m, place_osm)
-    last_error: httpx.HTTPError | None = None
     urls = [os.environ["OVERPASS_URL"]] if os.environ.get("OVERPASS_URL") else PUBLIC_OVERPASS_URLS
-    deadline = time.monotonic() + OVERPASS_TOTAL_BUDGET_S
-    for url in urls:
-        for attempt in range(2):
-            remaining = deadline - time.monotonic()
-            if remaining <= 1:
-                raise last_error or httpx.TimeoutException("Przekroczony łączny czas pobierania z Overpass")
-            timeout = httpx.Timeout(min(30, remaining), connect=min(8, remaining))
+    budget = OVERPASS_TOTAL_BUDGET_S
+    pool = ThreadPoolExecutor(max_workers=len(urls), thread_name_prefix="overpass")
+    futures = [pool.submit(_post_overpass, url, query, budget) for url in urls]
+    last_error: httpx.HTTPError | None = None
+    try:
+        for future in as_completed(futures, timeout=budget):
             try:
-                resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=timeout)
-                resp.raise_for_status()
-                return parse_overpass(resp.json(), today, place_id, location, place_osm)
-            except httpx.HTTPStatusError as e:
-                last_error = e
-                # 429 = limit zapytań publicznego serwera, 50x = przeciążenie - jedna ponowna próba po przerwie
-                if e.response.status_code in RETRY_STATUSES and attempt == 0:
-                    time.sleep(_retry_after_s(e.response))
-                    continue
-                break
+                data = future.result()
             except httpx.HTTPError as e:
                 last_error = e
-                break
+                continue
+            return parse_overpass(data, today, place_id, location, place_osm)
+    except FuturesTimeout:
+        raise last_error or httpx.TimeoutException("Przekroczony łączny czas pobierania z Overpass") from None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)  # nie czekamy na wolniejsze serwery
     assert last_error is not None
     raise last_error
-
-
-RETRY_STATUSES = {429, 502, 503, 504}
-
-
-def _retry_after_s(resp: httpx.Response) -> float:
-    try:
-        return min(float(resp.headers.get("Retry-After", 5)), 15)
-    except ValueError:
-        return 5
 
 
 def describe_error(e: httpx.HTTPError) -> str:

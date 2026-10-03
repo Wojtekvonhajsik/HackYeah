@@ -43,6 +43,7 @@ docker run -d -p 8000:8000 --env-file .env -v bezbarier-data:/app/storage krakow
 | HTTPS | reverse proxy (np. Caddy) albo certyfikat od platformy hostingowej | 0 zł |
 | OSM: Nominatim + Overpass | publiczne serwery (limity: ~1 zapytanie/s) | 0 zł; przy dużym ruchu własna instancja |
 | Zdjęcia Mapillary | publiczne API z darmowym tokenem | 0 zł |
+| Statystyki GUS (BDL) | publiczne API, opcjonalny klucz `GUS_CLIENT_ID` (wyższe limity) | 0 zł |
 | Detekcja AI (Gemini Flash-Lite) | płatne za zdjęcie, **raz** - wynik jest zapisywany | liczba zdjęć × cena za zapytanie (aktualny cennik Google) |
 
 Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - to samo zdjęcie nigdy nie jest analizowane drugi raz.
@@ -59,7 +60,8 @@ Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - 
 
 ## Aktualność danych
 
-- **OSM** - pobierane przy pierwszej ocenie miejsca i odświeżane co 30 dni (`OSM_REFRESH_DAYS`); data informacji =
+- **OSM** - pobierane w tle (już przy wyszukiwaniu, równolegle z kilku serwerów Overpass), ocena nie czeka -
+  aplikacja dociąga wynik sama; po nieudanej próbie kolejna dopiero po 2 min. Odświeżane co 30 dni (`OSM_REFRESH_DAYS`); data informacji =
   `check_date` albo ostatnia edycja w OSM. Nieudane odświeżenie = komunikat w `warnings`, ocena na wcześniejszych danych.
 - **Zdjęcia** - skan na żądanie (`/places/{id}/scan`); data informacji = data wykonania zdjęcia, nie analizy.
   Skan wybiera zdjęcia z ostatnich 3 lat (starsze tylko, gdy nowszych nie ma - z adnotacją w `notes`),
