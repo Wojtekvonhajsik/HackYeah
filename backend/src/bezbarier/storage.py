@@ -1,8 +1,10 @@
-"""Repozytorium obserwacji w pamięci. Docelowo PostgreSQL + PostGIS z tym samym interfejsem."""
+"""Repozytorium obserwacji: w pamięci (testy) albo z zapisem do SQLite. Docelowo PostGIS z tym samym interfejsem."""
 
 from __future__ import annotations
 
 import json
+import sqlite3
+import threading
 import uuid
 from datetime import date
 from enum import Enum
@@ -109,11 +111,93 @@ class InMemoryRepository:
             "last_confirmed_at": max((v.created_at for v in confirms), default=None),
         })
 
+    def save_analyzed_images(self) -> None:
+        """Wywoływane po skanie. W pamięci nic do zrobienia; SqliteRepository zapisuje do bazy."""
+
+    def load_file(self, path: Path) -> None:
+        """Wczytuje miejsca i obserwacje z pliku JSON (np. dane przykładowe)."""
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for p in data.get("places", []):
+            self.add_place(Place.model_validate(p))
+        self.add_observations([Observation.model_validate(o) for o in data.get("observations", [])])
+
     @classmethod
     def from_file(cls, path: Path) -> InMemoryRepository:
-        data = json.loads(path.read_text(encoding="utf-8"))
         repo = cls()
-        for p in data.get("places", []):
-            repo.add_place(Place.model_validate(p))
-        repo.add_observations([Observation.model_validate(o) for o in data.get("observations", [])])
+        repo.load_file(path)
         return repo
+
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS places (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS observations (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS votes (
+    observation_id TEXT NOT NULL,
+    voter_id TEXT NOT NULL,
+    data TEXT NOT NULL,
+    PRIMARY KEY (observation_id, voter_id)
+);
+CREATE TABLE IF NOT EXISTS analyzed_images (key TEXT PRIMARY KEY);
+"""
+
+
+class SqliteRepository(InMemoryRepository):
+    """Ta sama logika co w pamięci, ale każdy zapis trafia też do pliku SQLite.
+
+    Przy starcie wczytujemy całą bazę do pamięci - na skalę prototypu (tysiące obserwacji) to wystarczy.
+    Rekordy trzymamy jako JSON, więc zmiana modeli nie wymaga migracji schematu.
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+        self._db = sqlite3.connect(str(path), check_same_thread=False)
+        self._db.executescript(_SCHEMA)
+        self._load()
+
+    def _load(self) -> None:
+        for (data,) in self._db.execute("SELECT data FROM places"):
+            place = Place.model_validate_json(data)
+            self.places[place.id] = place
+        for (data,) in self._db.execute("SELECT data FROM observations"):
+            obs = Observation.model_validate_json(data)
+            self._observations[obs.id] = obs
+        for (data,) in self._db.execute("SELECT data FROM votes"):
+            vote = Vote.model_validate_json(data)
+            self._votes.setdefault(vote.observation_id, {})[vote.voter_id] = vote
+        self.analyzed_images.update(key for (key,) in self._db.execute("SELECT key FROM analyzed_images"))
+
+    def _write(self, sql: str, rows: list[tuple[str, ...]]) -> None:
+        with self._lock, self._db:  # "with self._db" = transakcja z automatycznym commit
+            self._db.executemany(sql, rows)
+
+    def add_place(self, place: Place) -> None:
+        super().add_place(place)
+        stored = self.places[place.id]
+        self._write("INSERT OR REPLACE INTO places VALUES (?, ?)", [(stored.id, stored.model_dump_json())])
+
+    def mark_loaded(self, place_id: str) -> None:
+        super().mark_loaded(place_id)
+        place = self.places[place_id]
+        self._write("INSERT OR REPLACE INTO places VALUES (?, ?)", [(place.id, place.model_dump_json())])
+
+    def add_observations(self, observations: list[Observation]) -> None:
+        super().add_observations(observations)
+        self._write(
+            "INSERT OR REPLACE INTO observations VALUES (?, ?)",
+            [(obs.id, obs.model_dump_json()) for obs in observations],
+        )
+
+    def add_vote(self, vote: Vote) -> Observation:
+        result = super().add_vote(vote)
+        self._write(
+            "INSERT OR REPLACE INTO votes VALUES (?, ?, ?)",
+            [(vote.observation_id, vote.voter_id, vote.model_dump_json())],
+        )
+        return result
+
+    def save_analyzed_images(self) -> None:
+        self._write("INSERT OR IGNORE INTO analyzed_images VALUES (?)", [(key,) for key in self.analyzed_images])
+
+    def close(self) -> None:
+        self._db.close()

@@ -204,3 +204,44 @@ def test_missing_api_key_gives_clear_error(monkeypatch):
     resp = client.post("/places/muzeum-kazimierz/scan")
     assert resp.status_code == 400
     assert "No API key" in resp.json()["detail"]
+
+
+def test_osm_place_restored_after_restart(monkeypatch):
+    """Po restarcie serwera repo jest puste - miejsce osm-* odtwarzamy z OSM zamiast zwracać 404."""
+    lookups = []
+
+    def lookup(osm_type, osm_id):
+        lookups.append((osm_type, osm_id))
+        return {**NOMINATIM_RESULT[0], "lat": "50.07", "lon": "19.95"}
+
+    monkeypatch.setattr(main.osm, "lookup_place", lookup)
+    monkeypatch.setattr(main.osm, "fetch_place_observations", lambda *a: [])
+    resp = client.post("/places/osm-node-123/assessment", json={"preset": "step_free_strict", **TODAY})
+    assert resp.status_code == 200
+    assert lookups == [("node", 123)]
+    assert client.get("/places").json()[-1]["name"] == "Kawiarnia Testowa"
+
+
+def test_unknown_place_id():
+    resp = client.post("/places/nie-ma/assessment", json={"preset": "step_free_strict"})
+    assert resp.status_code == 404
+
+
+def test_scan_expands_radius_when_no_images(monkeypatch):
+    radii = []
+
+    def images_near(lat, lon, radius_m, limit):
+        radii.append(radius_m)
+        return _scan_images(lat, lon, radius_m, limit) if radius_m >= 100 else []
+
+    monkeypatch.setattr(main.mapillary, "images_near", images_near)
+    body = client.post("/places/muzeum-kazimierz/scan").json()
+    assert radii == [25, 50, 100]
+    assert body["radius_m"] == 100
+    assert body["images_found"] == 1
+
+
+def test_scan_gives_up_at_max_radius(monkeypatch):
+    monkeypatch.setattr(main.mapillary, "images_near", lambda lat, lon, radius_m, limit: [])
+    body = client.post("/places/muzeum-kazimierz/scan").json()
+    assert (body["images_found"], body["radius_m"]) == (0, 100)

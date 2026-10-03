@@ -1,6 +1,7 @@
 # Backend - Kraków bez barier
 
-Klasyfikacja barier wg potrzeb użytkownika. Projekt: [docs/klasyfikacja-barier.md](../docs/klasyfikacja-barier.md).
+Klasyfikacja barier wg potrzeb użytkownika. Projekt: [docs/klasyfikacja-barier.md](../docs/klasyfikacja-barier.md),
+wdrożenie (Docker, koszty, ochrona danych): [docs/wdrozenie.md](../docs/wdrozenie.md).
 
 ## Struktura
 
@@ -10,7 +11,7 @@ src/bezbarier/
   detection/        # detektory zdjęć: MockDetector, GeminiVisionDetector, ClaudeVisionDetector
   scan.py           # skan okolicy miejsca: zdjęcia Mapillary -> detektor -> obserwacje
   sources/          # adaptery źródeł: OpenStreetMap (Nominatim + Overpass), Mapillary
-  storage.py        # repozytorium w pamięci (docelowo PostGIS)
+  storage.py        # repozytorium: SQLite (backend/data/bezbarier.db) albo w pamięci w testach
   api/main.py       # FastAPI
 data/sample_observations.json   # DANE PRZYKŁADOWE do demo
 ```
@@ -63,3 +64,8 @@ Skopiuj `.env.example` jako `.env` (w folderze `backend`) i uzupełnij. `.env` j
 | `ANTHROPIC_API_KEY` | detektor Claude, wymaga `pip install -e ".[claude]"` |
 
 Testy zawsze używają detektora `mock`, niezależnie od `.env`.
+
+## Baza danych
+
+Głosy, poprawki, dane pobrane z OSM i wyniki skanów zapisują się w `backend/data/bezbarier.db` (SQLite, plik w `.gitignore`)
+i przetrwają restart serwera. Żeby zacząć od zera, zatrzymaj serwer i usuń ten plik.

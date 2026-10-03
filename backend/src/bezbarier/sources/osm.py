@@ -21,21 +21,19 @@ from ..classification.fusion import haversine_m
 from ..classification.models import FeatureType, GeoPoint, Observation, Source, SourceType
 
 # Publiczne instancje bywają przeciążone - próbujemy po kolei. OVERPASS_URL nadpisuje listę (np. własna instancja).
-OVERPASS_URLS = (
-    [os.environ["OVERPASS_URL"]]
-    if os.environ.get("OVERPASS_URL")
-    else [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter",
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-    ]
-)
+PUBLIC_OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
 OVERPASS_TIMEOUT = httpx.Timeout(30, connect=8)
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup"
 USER_AGENT = "KrakowBezBarier/0.1 (HackYeah prototype)"
 LICENSE = "ODbL"
 
-# Kraków: minLon, maxLat, maxLon, minLat (format viewbox Nominatim)
+# Obszar wyszukiwania miejsc: minLon,maxLat,maxLon,minLat (format viewbox Nominatim).
+# Domyślnie Kraków; inne miasto = inna wartość CITY_VIEWBOX, reszta systemu bez zmian.
 KRAKOW_VIEWBOX = "19.79,50.13,20.22,49.97"
 
 FOOTWAY_RE = "^(footway|pedestrian|path|steps|living_street)$"
@@ -282,7 +280,8 @@ def fetch_place_observations(
     today = today or date.today()
     query = overpass_query(location.lat, location.lon, radius_m, place_osm)
     last_error: httpx.HTTPError | None = None
-    for url in OVERPASS_URLS:
+    urls = [os.environ["OVERPASS_URL"]] if os.environ.get("OVERPASS_URL") else PUBLIC_OVERPASS_URLS
+    for url in urls:
         try:
             resp = httpx.post(url, data={"data": query}, headers={"User-Agent": USER_AGENT}, timeout=OVERPASS_TIMEOUT)
             resp.raise_for_status()
@@ -293,8 +292,9 @@ def fetch_place_observations(
     raise last_error
 
 
-def search_places(query: str, viewbox: str = KRAKOW_VIEWBOX, limit: int = 10) -> list[dict[str, Any]]:
-    """Zwraca surowe wyniki Nominatim (ograniczone do viewbox miasta)."""
+def search_places(query: str, viewbox: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
+    """Zwraca surowe wyniki Nominatim (ograniczone do obszaru miasta - CITY_VIEWBOX)."""
+    viewbox = viewbox or os.environ.get("CITY_VIEWBOX", KRAKOW_VIEWBOX)
     resp = httpx.get(
         NOMINATIM_URL,
         params={
@@ -310,3 +310,16 @@ def search_places(query: str, viewbox: str = KRAKOW_VIEWBOX, limit: int = 10) ->
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def lookup_place(osm_type: str, osm_id: int) -> dict[str, Any] | None:
+    """Jedno miejsce po identyfikatorze OSM (Nominatim lookup) - ten sam format co wyniki search_places."""
+    resp = httpx.get(
+        NOMINATIM_LOOKUP_URL,
+        params={"osm_ids": f"{osm_type[0].upper()}{osm_id}", "format": "jsonv2", "accept-language": "pl"},
+        headers={"User-Agent": USER_AGENT},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    results = resp.json()
+    return results[0] if results else None
