@@ -245,14 +245,16 @@ details.around { margin-top: 20px; }
   background: none; border: 0; padding: 0 4px; min-height: 44px; color: var(--primary); font: inherit;
   text-decoration: underline; cursor: pointer;
 }
-.stat-grid { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; grid-template-columns: 1fr; }
-.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
-.stat strong { display: block; font-size: 1.5rem; line-height: 1.2; color: var(--primary); }
-.stat span { font-size: 0.92rem; color: var(--muted); }
 .source-note { font-size: 0.82rem; color: var(--muted); margin: 6px 0 0; }
 .gus-context p { margin: 0; font-size: 0.95rem; }
 .notice.loading { display: flex; align-items: center; gap: 10px; }
-@media (min-width: 560px) { .stat-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.safety { border-left: 6px solid var(--unknown); }
+.safety[data-level="elevated"] { border-left-color: var(--uncertain); }
+.safety[data-level="lower"] { border-left-color: var(--ok); }
+.safety h2 { flex: 1; font-size: 1.15rem; }
+.safety-tips { margin: 0 0 4px; padding-left: 20px; }
+.safety-tips li { margin-bottom: 4px; }
 
 /* ---------- formularze zgłoszeń ---------- */
 .form-grid { display: grid; gap: 6px; }

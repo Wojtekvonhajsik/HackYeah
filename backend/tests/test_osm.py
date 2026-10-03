@@ -138,21 +138,62 @@ def test_overpass_gives_up_with_readable_reason(monkeypatch):
     monkeypatch.setattr(osm.httpx, "post", lambda *a, **k: _response(429))
     monkeypatch.setenv("OVERPASS_URL", "https://overpass.test")
     with pytest.raises(httpx.HTTPStatusError) as exc:
-        osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
+        osm._race_overpass("query", 5)
     assert osm.describe_error(exc.value) == "serwer ogranicza liczbę zapytań"
 
 
-def test_overpass_stops_after_total_budget(monkeypatch):
+def test_overpass_stops_after_budget(monkeypatch):
     import time
 
     def slow_post(*args, **kwargs):
-        time.sleep(0.5)  # serwer "wisi" dłużej niż łączny limit
+        time.sleep(0.5)  # serwer "wisi" dłużej niż limit
         return _response(200, OVERPASS)
 
-    monkeypatch.setattr(osm, "OVERPASS_TOTAL_BUDGET_S", 0.1)
     monkeypatch.setattr(osm.httpx, "post", slow_post)
     monkeypatch.setenv("OVERPASS_URL", "https://overpass.test")
     started = time.monotonic()
     with pytest.raises(httpx.TimeoutException):
-        osm.fetch_place_observations("osm-node-1", PLACE, ("node", 1), today=TODAY)
+        osm._race_overpass("query", 0.1)
     assert time.monotonic() - started < 0.4  # nie czekamy na wolny serwer
+
+
+def test_html_error_page_is_source_error(monkeypatch):
+    html = httpx.Response(200, text="<html>rate_limited</html>", request=httpx.Request("POST", "https://o.test"))
+    monkeypatch.setattr(osm.httpx, "post", lambda *a, **k: html)
+    with pytest.raises(osm.OsmSourceError):
+        osm._post_overpass("https://o.test", "query", 5)
+
+
+OSM_API_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6">
+ <node id="10" lat="50.0617" lon="19.9373" timestamp="2024-02-15T10:00:00Z"/>
+ <node id="11" lat="50.0619" lon="19.9375" timestamp="2024-02-15T10:00:00Z"/>
+ <node id="12" lat="50.06171" lon="19.93731" timestamp="2024-06-03T10:00:00Z"><tag k="entrance" v="main"/><tag k="door:width" v="1.1"/></node>
+ <node id="13" lat="50.0618" lon="19.9374" timestamp="2024-06-06T10:00:00Z"><tag k="highway" v="crossing"/><tag k="crossing" v="uncontrolled"/></node>
+ <node id="14" lat="50.0618" lon="19.9374" timestamp="2024-06-06T10:00:00Z"><tag k="shop" v="bakery"/></node>
+ <way id="20" timestamp="2024-02-15T10:00:00Z"><nd ref="10"/><nd ref="11"/><tag k="highway" v="footway"/><tag k="surface" v="sett"/></way>
+ <way id="21" timestamp="2024-02-15T10:00:00Z"><nd ref="10"/><nd ref="11"/><tag k="highway" v="primary"/></way>
+ <way id="30" timestamp="2025-01-10T10:00:00Z"><nd ref="10"/><nd ref="11"/><tag k="amenity" v="townhall"/><tag k="wheelchair" v="yes"/></way>
+</osm>"""
+
+
+def test_falls_back_to_osm_api_when_overpass_down(monkeypatch):
+    def overpass_down(*args, **kwargs):
+        raise httpx.ConnectTimeout("timeout")
+
+    def osm_api(url, **kwargs):
+        assert url.endswith("/map")
+        return httpx.Response(200, text=OSM_API_XML, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(osm.httpx, "post", overpass_down)
+    monkeypatch.setattr(osm.httpx, "get", osm_api)
+    obs = {o.id: o for o in osm.fetch_place_observations("osm-way-30", PLACE, ("way", 30), today=TODAY)}
+    assert set(obs) == {
+        "osm-way-30-entrance",       # tagi samego obiektu (wheelchair=yes)
+        "osm-node-12-entrance",      # wejście obok
+        "osm-node-13-crossing",
+        "osm-way-20-surface",        # chodnik; droga 'primary' i piekarnia pominięte
+    }
+    assert obs["osm-node-12-entrance"].attrs == {"width_cm": 110}
+    assert obs["osm-way-30-entrance"].attrs["threshold_cm"] == {"lo": 0, "hi": 2}
+    assert obs["osm-way-20-surface"].location.lat == pytest.approx(50.0618)  # środek drogi z jej węzłów

@@ -34,6 +34,8 @@ SURFACE_PL = {
     "ground": "grunt",
     "mud": "błoto",
     "wood": "drewno",
+    "paved": "nawierzchnia utwardzona",
+    "unpaved": "nawierzchnia nieutwardzona",
 }
 
 AMENITY_PL = {

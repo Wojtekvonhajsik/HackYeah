@@ -173,3 +173,138 @@ def city_stats(unit_id: str | None = None) -> CityStats:
 def stats_summary(stats: CityStats) -> dict[str, Any]:
     """Wartości po kluczu - wygodne dla frontendu i testów."""
     return {item.key: item for item in stats.items}
+
+
+# ---------- bezpieczeństwo (wypadki drogowe, przestępczość) ----------
+
+POLAND_UNIT_ID = "000000000000"
+
+# Wskaźniki na mieszkańca - porównywalne z średnią krajową. Dostępne dla powiatu (miasto na prawach powiatu).
+SAFETY_VARIABLES = {
+    "accidents": "7849",                  # wypadki drogowe ogółem (P1754)
+    "injured": "7851",                    # ranni (P1754)
+    "killed": "7850",                     # ofiary śmiertelne (P1754)
+    "accidents_per_100k": "471916",       # wypadki drogowe na 100 tys. ludności (P2423)
+    "killed_per_100k": "60551",           # ofiary śmiertelne na 100 tys. ludności (P2423)
+    "crimes_per_1000": "1752907",         # przestępstwa stwierdzone przez Policję na 1000 mieszkańców (P4633)
+}
+
+
+class SafetyIndicator(BaseModel):
+    key: str
+    label: str
+    city: float
+    country: float | None
+    unit: str
+    year: int
+    ratio: float | None  # miasto / Polska
+    variable_id: str
+
+
+class CitySafety(BaseModel):
+    unit_id: str
+    indicators: list[SafetyIndicator]
+    accidents: int | None = None
+    injured: int | None = None
+    killed: int | None = None
+    year: int | None = None
+    source: str = ATTRIBUTION
+    license: str = LICENSE
+    url: str = "https://bdl.stat.gov.pl"
+    retrieved_at: date
+    from_snapshot: bool = False
+
+
+def powiat_of(unit_id: str) -> str:
+    """Miasto na prawach powiatu: gmina 011212161011 -> powiat 011212161000."""
+    return unit_id[:9] + "000"
+
+
+def fetch_safety_values(unit_id: str) -> dict[str, Values]:
+    headers = {"User-Agent": USER_AGENT}
+    if client_id := os.environ.get("GUS_CLIENT_ID"):
+        headers["X-ClientId"] = client_id
+    params = [("format", "json")] + [("var-id", var) for var in SAFETY_VARIABLES.values()]
+    result: dict[str, Values] = {}
+    for scope, unit in (("city", powiat_of(unit_id)), ("country", POLAND_UNIT_ID)):
+        resp = httpx.get(f"{BDL_URL}/data/by-unit/{unit}", params=params, headers=headers, timeout=20)
+        resp.raise_for_status()
+        by_id = {str(res["id"]): res["values"] for res in resp.json().get("results", [])}
+        result[scope] = {
+            name: {int(v["year"]): float(v["val"]) for v in by_id.get(var, []) if v.get("val") is not None}
+            for name, var in SAFETY_VARIABLES.items()
+        }
+    return result
+
+
+def build_safety(values: dict[str, Values], unit_id: str, retrieved_at: date, from_snapshot: bool = False) -> CitySafety:
+    city, country = values.get("city", {}), values.get("country", {})
+    indicators = []
+    for key, label, unit in [
+        ("accidents_per_100k", "wypadki drogowe", "na 100 tys. mieszkańców"),
+        ("killed_per_100k", "ofiary śmiertelne wypadków", "na 100 tys. mieszkańców"),
+        ("crimes_per_1000", "przestępstwa stwierdzone przez Policję", "na 1000 mieszkańców"),
+    ]:
+        if (latest := _latest(city, key)) is None:
+            continue
+        year, value = latest
+        national = country.get(key, {}).get(year)
+        indicators.append(SafetyIndicator(
+            key=key, label=label, city=value, country=national, unit=unit, year=year,
+            ratio=round(value / national, 2) if national else None, variable_id=SAFETY_VARIABLES[key],
+        ))
+    totals = {key: _latest(city, key) for key in ("accidents", "injured", "killed")}
+    year = totals["accidents"][0] if totals["accidents"] else None
+    return CitySafety(
+        unit_id=unit_id,
+        indicators=indicators,
+        accidents=int(totals["accidents"][1]) if totals["accidents"] else None,
+        injured=int(totals["injured"][1]) if totals["injured"] else None,
+        killed=int(totals["killed"][1]) if totals["killed"] else None,
+        year=year,
+        retrieved_at=retrieved_at,
+        from_snapshot=from_snapshot,
+    )
+
+
+def _safety_snapshot_path(unit_id: str) -> Path:
+    return SNAPSHOT_DIR / f"gus_safety_{unit_id}.json"
+
+
+def save_safety_snapshot(unit_id: str, values: dict[str, Values], retrieved_at: date) -> None:
+    payload = {"unit_id": unit_id, "retrieved_at": retrieved_at.isoformat(), "values": values}
+    _safety_snapshot_path(unit_id).write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _load_safety_snapshot(unit_id: str) -> tuple[dict[str, Values], date] | None:
+    path = _safety_snapshot_path(unit_id)
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    values = {
+        scope: {name: {int(y): v for y, v in series.items()} for name, series in by_name.items()}
+        for scope, by_name in payload["values"].items()
+    }
+    return values, date.fromisoformat(payload["retrieved_at"])
+
+
+_safety_cache: dict[str, tuple[float, CitySafety]] = {}
+
+
+def city_safety(unit_id: str | None = None) -> CitySafety:
+    """Wskaźniki bezpieczeństwa miasta vs średnia krajowa (pamięć 12 h, przy awarii GUS - zapisana kopia)."""
+    unit_id = unit_id or os.environ.get("GUS_UNIT_ID", KRAKOW_UNIT_ID)
+    with _lock:
+        cached = _safety_cache.get(unit_id)
+        if cached and time.monotonic() - cached[0] < CACHE_TTL_S:
+            return cached[1]
+    try:
+        safety = build_safety(fetch_safety_values(unit_id), unit_id, date.today())
+    except (httpx.HTTPError, ValueError, KeyError):
+        snapshot = _load_safety_snapshot(unit_id)
+        if snapshot is None:
+            raise
+        safety = build_safety(snapshot[0], unit_id, snapshot[1], from_snapshot=True)
+    with _lock:
+        _safety_cache[unit_id] = (time.monotonic(), safety)
+    return safety

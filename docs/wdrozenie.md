@@ -60,7 +60,8 @@ Koszt AI nie rośnie z liczbą użytkowników, tylko z liczbą nowych zdjęć - 
 
 ## Aktualność danych
 
-- **OSM** - pobierane w tle (już przy wyszukiwaniu, równolegle z kilku serwerów Overpass), ocena nie czeka -
+- **OSM** - pobierane w tle (już przy wyszukiwaniu, równolegle z kilku serwerów Overpass; gdy żaden nie odpowie w 12 s -
+  jedno małe zapytanie do głównego API OpenStreetMap, które służy głównie do edycji, więc tylko awaryjnie), ocena nie czeka -
   aplikacja dociąga wynik sama; po nieudanej próbie kolejna dopiero po 2 min. Odświeżane co 30 dni (`OSM_REFRESH_DAYS`); data informacji =
   `check_date` albo ostatnia edycja w OSM. Nieudane odświeżenie = komunikat w `warnings`, ocena na wcześniejszych danych.
 - **Zdjęcia** - skan na żądanie (`/places/{id}/scan`); data informacji = data wykonania zdjęcia, nie analizy.

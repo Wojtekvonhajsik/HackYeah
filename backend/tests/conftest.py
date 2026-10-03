@@ -39,6 +39,22 @@ def sync_osm_loading(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def gus_offline(monkeypatch):
+    """Testy nie pytają GUS przez sieć - używają zapisanej kopii z data/."""
+    import httpx
+
+    from bezbarier.sources import gus
+
+    def offline(*args, **kwargs):
+        raise httpx.ConnectError("testy bez sieci")
+
+    monkeypatch.setattr(gus, "fetch_values", offline)
+    monkeypatch.setattr(gus, "fetch_safety_values", offline)
+    monkeypatch.setattr(gus, "_cache", {})
+    monkeypatch.setattr(gus, "_safety_cache", {})
+
+
+@pytest.fixture(autouse=True)
 def mock_detector(monkeypatch):
     """Testy nigdy nie wołają płatnych API, nawet jeśli w backend/.env jest DETECTOR=gemini."""
     monkeypatch.setenv("DETECTOR", "mock")
