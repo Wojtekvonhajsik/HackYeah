@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Dostępni.pl - prezentacja</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  :root {
+    --ink: #0f1a2b; --muted: #4a5568; --line: #dfe5ee; --bg: #f6f8fb;
+    --blue: #1e6fd9; --green: #1f9d55; --amber: #b7791f; --red: #c53030;
+    --grad: linear-gradient(120deg, #1e6fd9 0%, #18a0b8 55%, #2fb36b 100%);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #fff; }
+  body { font-family: Inter, "Segoe UI", Arial, sans-serif; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { width: 1280px; height: 720px; position: relative; overflow: hidden; page-break-after: always; break-after: page;
+           padding: 56px 72px 48px; background: #fff; }
+  .slide:last-child { page-break-after: auto; }
+  .top { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
+  .kicker { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--blue); }
+  .crit { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--muted); border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 14px; }
+  h1 { font-size: 64px; line-height: 1.05; font-weight: 800; letter-spacing: -.02em; }
+  h2 { font-size: 40px; line-height: 1.12; font-weight: 800; letter-spacing: -.015em; margin-bottom: 22px; }
+  h3 { font-size: 19px; font-weight: 700; margin-bottom: 6px; }
+  p, li { font-size: 18px; line-height: 1.45; color: var(--muted); }
+  b, strong { color: var(--ink); font-weight: 700; }
+  ul { padding-left: 22px; } li { margin-bottom: 6px; }
+  .grad { color: #1e6fd9; }
+  .foot { position: absolute; left: 72px; right: 72px; bottom: 22px; display: flex; justify-content: space-between; font-size: 12px; color: #8a96a8; }
+  .row { display: flex; gap: 28px; }
+  .col { flex: 1; min-width: 0; }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; }
+  .card p, .card li { font-size: 16px; }
+  .phone { width: 250px; height: 520px; border-radius: 30px; border: 8px solid #0f1a2b; overflow: hidden; background: #0f1722;
+           box-shadow: 0 18px 40px rgba(15,26,43,.22); flex: none; }
+  .phone img { width: 100%; display: block; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 700; border-radius: 999px; padding: 3px 11px; margin: 0 6px 6px 0; }
+  .t-red { background: #fde8e8; color: var(--red); } .t-amb { background: #fdf3dc; color: #8a5a00; }
+  .t-grn { background: #e3f6ea; color: #17733f; } .t-gry { background: #edf0f4; color: #4a5568; } .t-blu { background: #e4efff; color: #1b5bb3; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #8a96a8; padding: 8px 10px; border-bottom: 2px solid var(--line); }
+  td { padding: 10px 10px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); line-height: 1.35; }
+  td b { color: var(--ink); }
+  .num { font-size: 44px; font-weight: 800; line-height: 1; }
+  .step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+  .dot { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--grad); color: #fff; font-weight: 800; font-size: 15px;
+         display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+  .flow { display: flex; align-items: stretch; gap: 10px; }
+  .flow .box { flex: 1; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .flow .box h3 { font-size: 16px; } .flow .box p { font-size: 13.5px; line-height: 1.4; }
+  .arrow { align-self: center; font-size: 26px; color: #9aa7b8; font-weight: 700; }
+  .quote { font-size: 20px; font-weight: 600; color: var(--ink); border-left: 5px solid #18a0b8; padding: 4px 0 4px 16px; }
+  .roomy p, .roomy li, .roomy td { font-size: 21px; } .roomy h3 { font-size: 24px; margin-bottom: 8px; }
+  .roomy .card { padding: 26px 28px; } .roomy td { padding: 16px 10px; } .roomy h2 { margin-bottom: 30px; }
+  .roomy .quote { font-size: 24px; } .roomy .tag { font-size: 15px; }
+</style>
+</head>
+<body>
+
+<!-- 1. TYTUŁ -->
+<section class="slide" style="padding:0; display:flex;">
+  <div style="flex:1; padding:72px 72px 56px; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; gap:16px;">
+      <img src="img/logo.png" alt="" style="width:76px; height:76px; border-radius:50%;">
+      <span style="font-size:30px; font-weight:800;">Dostępni.pl</span>
+    </div>
+    <h1 style="margin-top:64px;">Sprawdź, czy <span class="grad">dasz radę wejść</span> - zanim wyjdziesz z domu</h1>
+    <p style="font-size:24px; margin-top:28px;">Dostępność miejsc w Krakowie dopasowana do Twoich potrzeb.</p>
+    <p style="margin-top:auto; font-size:15px;">HackYeah 2026 · wyzwanie „Kraków bez barier”</p>
+  </div>
+  <div style="width:430px; background:var(--grad); display:flex; align-items:center; justify-content:center;">
+    <div class="phone" style="height:560px; width:270px;"><img src="img/sukiennice.png" alt="Karta miejsca Sukiennice"></div>
+  </div>
+</section>
+
+<!-- 2. PROBLEM -->
+<section class="slide roomy">
+  <div class="top"><span class="kicker">Problem</span></div>
+  <h2>„Dostępne / niedostępne” nic nie mówi</h2>
+  <p class="quote" style="margin-bottom:48px;">Próg 8 cm: dla wózka - przeszkoda, dla wózka dziecięcego - tylko utrudnienie.</p>
+  <div class="row">
+    <div class="col card"><h3>Rozproszone dane</h3><p>Nie wiadomo, skąd są i czy aktualne.</p></div>
+    <div class="col card"><h3>Brak danych ≠ dostępne</h3><p>A tak bywa pokazywany.</p></div>
+    <div class="col card"><h3>Miasto nie utrzyma bazy</h3><p>Tysięcy obiektów nie da się aktualizować ręcznie.</p></div>
+  </div>
+  <h3 style="margin:40px 0 12px;">Dla kogo</h3>
+  <div>
+    <span class="tag t-blu" style="font-size:17px; padding:8px 16px;">Osoby na wózkach</span>
+    <span class="tag t-blu" style="font-size:17px; padding:8px 16px;">Rodzice z wózkami</span>
+    <span class="tag t-gry" style="font-size:17px; padding:8px 16px;">Osoby o ograniczonej wytrzymałości</span>
+    <span class="tag t-gry" style="font-size:17px; padding:8px 16px;">Osoby niewidome</span>
+  </div>
+  <div class="foot"><span>Dostępni.pl</span><span>2</span></div>
+</section>
+
+<!-- 3. ROZWIĄZANIE -->
+<section class="slide">
+  <div class="top"><span class="kicker">Rozwiązanie</span></div>
+  <h2>Trzy kroki do odpowiedzi</h2>
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+    <div style="text-align:center;">
+      <div class="phone" style="height:420px; width:225px; margin:0 auto;"><img src="img/profil.png" alt=""></div>
+      <div class="step" style="margin-top:16px; justify-content:center;"><span class="dot">1</span><p style="text-align:left;"><b>Wybierz potrzeby</b><br>tylko preferencje</p></div>
+    </div>
+    <div style="text-align:center;">
+      <div class="phone" style="height:420px; width:225px; margin:0 auto;"><img src="img/start.png" alt=""></div>
+      <div class="step" style="margin-top:16px; justify-content:center;"><span class="dot">2</span><p style="text-align:left;"><b>Wyszukaj miejsce</b><br>tekstem lub głosem</p></div>
+    </div>
+    <div style="text-align:center;">
+      <div class="phone" style="height:420px; width:225px; margin:0 auto;"><img src="img/urzad.png" alt=""></div>
+      <div class="step" style="margin-top:16px; justify-content:center;"><span class="dot">3</span><p style="text-align:left;"><b>Zobacz ocenę</b><br>bariery, źródła, pewność</p></div>
+    </div>
+    <div style="text-align:center;">
+      <div class="phone" style="height:420px; width:225px; margin:0 auto;"><img src="img/asystent.png" alt=""></div>
+      <div class="step" style="margin-top:16px; justify-content:center;"><span class="dot">+</span><p style="text-align:left;"><b>Albo zapytaj</b><br>zadaj pytanie</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Dostępni.pl</span><span>3</span></div>
+</section>
+
+<!-- 4. OCENA -->
+<section class="slide roomy">
+  <div class="top"><span class="kicker">Ocena dopasowana do potrzeb</span></div>
+  <h2>To samo miejsce - inna ocena dla każdego</h2>
+  <div style="margin-bottom:30px;">
+    <span class="tag t-gry">schody</span><span class="tag t-gry">progi</span><span class="tag t-gry">podjazdy</span>
+    <span class="tag t-gry">windy</span><span class="tag t-gry">szerokość wejścia</span><span class="tag t-gry">nawierzchnia</span>
+    <span class="tag t-gry">toaleta</span><span class="tag t-gry">ławki</span><span class="tag t-gry">poręcze</span>
+  </div>
+  <div class="row">
+    <div class="col">
+      <table style="font-size:17px;">
+        <tr><td><span class="tag t-red">Przeszkoda</span></td><td>nie dasz rady</td></tr>
+        <tr><td><span class="tag t-amb">Utrudnienie</span></td><td>da się, z wysiłkiem</td></tr>
+        <tr><td><span class="tag t-amb">Do sprawdzenia</span></td><td>dane niepewne</td></tr>
+        <tr><td><span class="tag t-gry">Brak danych</span></td><td><b>nigdy jako „dostępne”</b></td></tr>
+        <tr><td><span class="tag t-grn">W normie</span></td><td>mieści się w Twoich limitach</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <div class="card" style="margin-bottom:14px;"><h3>Miejsce vs okolica</h3><p>Schody obok budynku nie blokują wejścia.</p></div>
+      <div class="card" style="margin-bottom:14px;"><h3>Pewność w %</h3><p>Słaba przesłanka nie ogłosi „nie do pokonania”.</p></div>
+      <div class="card"><h3>Bezpieczeństwo okolicy</h3><p>Wypadki drogowe z danych GUS.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Dostępni.pl</span><span>4</span></div>
+</section>
+
+<!-- 5. WIARYGODNOŚĆ -->
+<section class="slide">
+  <div class="top"><span class="kicker">Wiarygodność danych</span></div>
+  <div class="row" style="gap:40px;">
+    <div class="col">
+      <h2>Źródło, data, status i pewność przy każdej informacji</h2>
+      <div style="margin-bottom:26px;"><span class="tag t-grn">potwierdzone</span><span class="tag t-gry">niepotwierdzone</span><span class="tag t-amb">nieaktualne</span><span class="tag t-red">sprzeczne</span></div>
+      <div class="step"><span class="dot">!</span><p><b>Sprzeczne dane:</b> OSM „próg 0-2 cm”, zdjęcie „5-10 cm” → <b>do sprawdzenia</b></p></div>
+      <div class="step"><span class="dot">↻</span><p><b>Źródło nie działa:</b> zapasowe serwery, „dane się wczytują”</p></div>
+      <div class="step"><span class="dot">✎</span><p><b>Poprawki:</b> „zgadza się / nie zgadza się”, zgłoszenia, właściciele</p></div>
+      <div class="step"><span class="dot">⏱</span><p><b>Stare dane</b> tracą wagę z czasem</p></div>
+    </div>
+    <div class="phone" style="height:560px; width:270px; margin-top:-6px;"><img src="img/sukiennice_det.png" alt="Szczegóły i źródła - sprzeczne dane"></div>
+  </div>
+  <div class="foot"><span>Dostępni.pl</span><span>5</span></div>
+</section>
+
+<!-- 6. ŹRÓDŁA -->
+<section class="slide roomy">
+  <div class="top"><span class="kicker">Źródła danych</span></div>
+  <h2>Tylko publiczne dane - bez systemów miasta</h2>
+  <table style="font-size:17px;">
+    <tr><th>Źródło</th><th>Co daje</th><th>Licencja</th></tr>
+    <tr><td><b>OpenStreetMap</b></td><td>wejścia, schody, rampy, windy, toalety</td><td>ODbL</td></tr>
+    <tr><td><b>Mapillary + AI</b></td><td>progi i drzwi rozpoznane ze zdjęć ulic</td><td>CC-BY-SA 4.0</td></tr>
+    <tr><td><b>GUS</b></td><td>bezpieczeństwo: wypadki drogowe</td><td>CC BY 4.0</td></tr>
+    <tr><td><b>Właściciele</b></td><td>potwierdzone pomiary</td><td>-</td></tr>
+    <tr><td><b>Użytkownicy</b></td><td>potwierdzenia i poprawki</td><td>-</td></tr>
+  </table>
+  <p style="margin-top:22px;">Dane pobierają się same przy pierwszym wyświetleniu miejsca.</p>
+  <div class="foot"><span>Dostępni.pl</span><span>6</span></div>
+</section>
+
+<!-- 7. ARCHITEKTURA -->
+<section class="slide">
+  <div class="top"><span class="kicker">Architektura i skalowanie</span></div>
+  <h2>Dane oddzielone od prezentacji</h2>
+  <div class="flow">
+    <div class="box"><h3>Źródła</h3><p>OSM, zdjęcia, GUS, ludzie</p></div>
+    <span class="arrow">→</span>
+    <div class="box"><h3>Adaptery</h3><p>wspólny format</p></div>
+    <span class="arrow">→</span>
+    <div class="box"><h3>Zaufanie</h3><p>wagi, głosy, wiek</p></div>
+    <span class="arrow">→</span>
+    <div class="box"><h3>Klasyfikator</h3><p>werdykt dla profilu</p></div>
+    <span class="arrow">→</span>
+    <div class="box"><h3>Otwarte API</h3><p>web, mobile, partnerzy</p></div>
+  </div>
+  <div class="row" style="margin-top:44px;">
+    <div class="col card"><div class="num grad">2</div><p style="margin-top:8px;">ustawienia, by dodać <b>nowe miasto</b></p></div>
+    <div class="col card"><div class="num grad">1</div><p style="margin-top:8px;">obraz Docker - <b>dowolny serwer</b></p></div>
+    <div class="col card"><div class="num grad">165</div><p style="margin-top:8px;"><b>testów</b> automatycznych</p></div>
+  </div>
+  <div class="foot"><span>Dostępni.pl</span><span>7</span></div>
+</section>
+
+<!-- 8. DOSTĘPNOŚĆ I PRYWATNOŚĆ -->
+<section class="slide roomy">
+  <div class="top"><span class="kicker">Dostępność cyfrowa i prywatność</span></div>
+  <h2>Sama aplikacja też musi być dostępna</h2>
+  <div class="row">
+    <div class="col card">
+      <h3>WCAG 2.2 AA jako cel</h3>
+      <ul style="margin-top:10px;">
+        <li>kontrast ≥ 5,7 : 1</li>
+        <li>obsługa klawiaturą i czytnikiem ekranu</li>
+        <li>tekstowa wersja mapy</li>
+        <li>odczyt i wyszukiwanie głosowe</li>
+      </ul>
+    </div>
+    <div class="col card" style="background:#eef7f1; border-color:#cfe9d8;">
+      <h3>Nie przechowujemy danych osobowych</h3>
+      <ul style="margin-top:10px;">
+        <li>bez kont i logowania</li>
+        <li>profil tylko na telefonie</li>
+        <li>anonimowe zgłoszenia</li>
+        <li>HTTPS, limity nadużyć</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Dostępni.pl</span><span>8</span></div>
+</section>
+
+<!-- 9. MODEL BIZNESOWY -->
+<section class="slide">
+  <div class="top"><span class="kicker">Model biznesowy</span></div>
+  <div class="row" style="gap:36px;">
+    <div class="col">
+      <h2 style="margin-bottom:14px;">Płacą firmy i miasta.<br>Użytkownik - nigdy.</h2>
+      <p class="quote" style="margin-bottom:22px;">Ocena dostępności nie jest na sprzedaż.</p>
+      <table style="font-size:17px;">
+        <tr><td><b>Lokale, hotele</b></td><td>jawnie oznaczona promocja <span class="tag t-grn" style="margin:0 0 0 6px;">działa</span></td></tr>
+        <tr><td><b>Lokale, hotele</b></td><td>abonament „Partner” z naklejką QR</td></tr>
+        <tr><td><b>Firmy</b></td><td>audyty dostępności (Akt o Dostępności)</td></tr>
+        <tr><td><b>Miasta</b></td><td>raporty: gdzie najpierw usuwać bariery</td></tr>
+        <tr><td><b>Booking, mapy</b></td><td>płatne API i widżet</td></tr>
+      </table>
+    </div>
+    <div style="width:250px;">
+      <div class="phone" style="height:500px; width:250px;"><img src="img/asystent.png" alt="Asystent z oznaczonym partnerem"></div>
+    </div>
+  </div>
+  <div class="foot"><span>Dostępni.pl</span><span>9</span></div>
+</section>
+
+<!-- 10. PLAN -->
+<section class="slide roomy">
+  <div class="top"><span class="kicker">Od prototypu do usługi</span></div>
+  <h2>Co dalej</h2>
+  <div class="row">
+    <div class="col card">
+      <h3>Utrzymanie</h3>
+      <p>Zespół prowadzi hosting poza UMK.<br>Koszt: <b>kilkadziesiąt zł / mies.</b></p>
+    </div>
+    <div class="col card">
+      <h3>Finansowanie</h3>
+      <p>Start z grantów, potem partnerzy i miasta.</p>
+    </div>
+  </div>
+  <h3 style="margin:32px 0 14px;">Plan rozwoju</h3>
+  <div class="row">
+    <div class="col card" style="background:#e4efff; border-color:#c9dcf8;">
+      <h3>Integracja z Google Maps API</h3>
+      <p>Więcej danych o dostępności miejsc.</p>
+    </div>
+    <div class="col card"><h3>Pilotaż w Krakowie</h3><p>Testy z użytkownikami i audyt WCAG.</p></div>
+    <div class="col card"><h3>Trasy bez schodów</h3><p>Nawigacja między miejscami.</p></div>
+    <div class="col card"><h3>Kolejne miasta</h3><p>Bez zmian w kodzie.</p></div>
+  </div>
+  <div class="foot"><span>Dostępni.pl · demo na prawdziwych danych OSM, Mapillary i GUS</span><span>10</span></div>
+</section>
+
+</body>
+</html>
