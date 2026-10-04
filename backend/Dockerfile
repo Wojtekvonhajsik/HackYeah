@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -e ".[gemini]"
 
 COPY data ./data
 COPY web ./web
+COPY scripts ./scripts
 
 # Baza SQLite na wolumenie - przetrwa restart i aktualizację kontenera
 ENV DATABASE_PATH=/app/storage/bezbarier.db

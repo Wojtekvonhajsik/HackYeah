@@ -1,0 +1,33 @@
+# Produkcja na VPS: aplikacja + Caddy (automatyczny certyfikat HTTPS dla domeny).
+# Domena i klucze w backend/.env (DOMAIN=..., szablon: .env.example). Start: docker compose up -d --build
+services:
+  app:
+    build: .
+    env_file: .env
+    # Caddy przekazuje prawdziwy adres IP użytkownika - potrzebny do limitów głosów i pytań.
+    # Port 8000 nie jest wystawiony na zewnątrz, więc nagłówkom ufamy tylko od Caddy.
+    command: ["uvicorn", "bezbarier.api.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--proxy-headers", "--forwarded-allow-ips", "*"]
+    volumes:
+      - data:/app/storage
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Ustaw DOMAIN w backend/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:
