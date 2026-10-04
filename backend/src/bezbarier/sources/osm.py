@@ -36,7 +36,7 @@ OSM_API_URL = "https://api.openstreetmap.org/api/0.6"
 logger = logging.getLogger(__name__)
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_LOOKUP_URL = "https://nominatim.openstreetmap.org/lookup"
-USER_AGENT = "KrakowBezBarier/0.1 (HackYeah prototype)"
+USER_AGENT = "Dostepni.pl/0.1 (HackYeah prototype)"
 LICENSE = "ODbL"
 
 # Obszar wyszukiwania miejsc: minLon,maxLat,maxLon,minLat (format viewbox Nominatim).

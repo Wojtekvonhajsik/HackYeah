@@ -1,3 +1,4 @@
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
@@ -10,7 +11,8 @@ from bezbarier.classification import GeoPoint, SourceType
 from bezbarier.storage import InMemoryRepository, Place, Sponsorship
 
 client = TestClient(main.app)
-BODY = {"preset": "step_free_strict", "today": "2026-10-03"}
+# kampanie startują od dzisiejszej daty, więc pytamy "dziś"
+BODY = {"preset": "step_free_strict", "today": date.today().isoformat()}
 
 
 def place(pid, name, kind, lat):
@@ -154,3 +156,15 @@ def test_assistant_rate_limited(monkeypatch):
     resp = client.post("/assistant", json={**BODY, "question": "kawa"})
     assert resp.status_code == 429
     assert "pytań do asystenta" in resp.json()["detail"]
+
+
+def test_partner_marked_in_organic_results_and_on_place_card():
+    assert sponsor("cafe-ok").status_code == 200
+    body = ask("kawiarnia")
+    first = body["places"][0]
+    assert (first["place_id"], first["partner"], first["sponsored"]) == ("cafe-ok", True, False)
+    assert first["sponsor_name"] == "Firma cafe-ok"
+    assert first["tagline"] is None  # treść reklamy tylko w polu sponsorowanym
+    card = client.post("/places/cafe-ok/assessment", json=BODY).json()
+    assert card["sponsor_name"] == "Firma cafe-ok"
+    assert client.post("/places/museum/assessment", json=BODY).json()["sponsor_name"] is None

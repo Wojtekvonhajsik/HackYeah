@@ -1,4 +1,4 @@
-# Backend - Kraków bez barier
+# Backend - Dostępni.pl
 
 Klasyfikacja barier wg potrzeb użytkownika. Projekt: [docs/klasyfikacja-barier.md](../docs/klasyfikacja-barier.md),
 wdrożenie (Docker, koszty, ochrona danych): [docs/wdrozenie.md](../docs/wdrozenie.md),

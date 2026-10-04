@@ -1,6 +1,6 @@
 "use strict";
 
-// Kraków bez barier - aplikacja webowa (mobile-first). Bez frameworka i bez kroku budowania:
+// Dostępni.pl - aplikacja webowa (mobile-first). Bez frameworka i bez kroku budowania:
 // serwowana przez backend pod /app/, API pod tym samym adresem.
 
 // ---------- słowniki (tekst + symbol - znaczenie nie zależy od koloru) ----------
@@ -221,6 +221,10 @@ function route() {
   let arg = null;
   if (hash.startsWith("#/profil")) {
     view = "profile";
+  } else if (hash.startsWith("#/prywatnosc")) {
+    view = "privacy"; // strony prawne dostępne bez wybierania profilu
+  } else if (hash.startsWith("#/regulamin")) {
+    view = "terms";
   } else if (hash.startsWith("#/wlasciciel/")) {
     view = "owner"; // właściciel nie musi wybierać profilu potrzeb
     arg = decodeURIComponent(hash.slice("#/wlasciciel/".length));
@@ -233,7 +237,9 @@ function route() {
     view = "place";
     arg = decodeURIComponent(hash.slice("#/miejsce/".length));
   }
-  for (const name of ["profile", "search", "place", "owner", "assistant"]) $(`#view-${name}`).hidden = name !== view;
+  for (const name of ["profile", "search", "place", "owner", "assistant", "privacy", "terms"]) {
+    $(`#view-${name}`).hidden = name !== view;
+  }
   $("#profile-chip-label").textContent = profileLabel();
   stopSpeaking();
   if (view === "profile") showProfile();
@@ -241,6 +247,8 @@ function route() {
   if (view === "place") showPlace(arg);
   if (view === "owner") showOwner(arg);
   if (view === "assistant") showAssistant();
+  if (view === "privacy") focusHeading("#privacy-title");
+  if (view === "terms") focusHeading("#terms-title");
 }
 
 function focusHeading(id) {
@@ -423,6 +431,9 @@ function assistantPlace(place, onClickAttr = "") {
   return `<a class="place-link" href="#/miejsce/${encodeURIComponent(place.place_id)}" ${onClickAttr}>
     <strong><span class="verdict-icon v-${summary.verdict}" aria-hidden="true">${VERDICT[summary.verdict].symbol}</span> ${esc(place.name)}</strong>
     <small>${esc(place.summary_text)}${confidence}</small>
+    ${place.partner && !place.sponsored
+      ? `<small class="partner-note">Partner (płatna promocja w Dostępni.pl) - pozycja wynika z oceny, nie z opłaty</small>`
+      : ""}
   </a>`;
 }
 
@@ -439,23 +450,25 @@ async function onAssistantSubmit(event) {
       body: JSON.stringify({ question, preset: p.preset, overrides: p.overrides }),
     });
     const sponsored = a.sponsored;
+    // Reklama jest NAD odpowiedzią - dlatego wprost piszemy, że jest tam za opłatą
     box.innerHTML = `
+      ${sponsored ? `
+      <aside class="card sponsored" aria-label="Sponsorowane - wyświetlane wyżej za opłatą">
+        <p class="sponsored-label">Sponsorowane · wyświetlane wyżej za opłatą</p>
+        <p><strong>${esc(sponsored.sponsor_name)}:</strong> ${esc(sponsored.tagline)}</p>
+        ${assistantPlace(sponsored, `data-sponsorship="${esc(sponsored.sponsorship_id)}"`)}
+        <details class="evidence"><summary>Dlaczego to widzę?</summary>
+          <p class="hint">Obiekt wykupił promocję i potwierdził dane o dostępności kodem właściciela. Pokazujemy ją
+          tylko osobom, dla których to miejsce nie ma znanych przeszkód. Opłata nie zmienia ocen ani kolejności poleceń poniżej.</p>
+        </details>
+      </aside>` : ""}
       <section class="card answer" aria-labelledby="answer-title">
-        <h2 id="answer-title" class="visually-hidden">Odpowiedź asystenta</h2>
+        <h2 id="answer-title" class="answer-title">Polecane na podstawie danych</h2>
+        <p class="hint">Kolejność wynika tylko z ocen dostępności - bez wpływu opłat.</p>
         <p>${esc(a.answer)}</p>
         ${a.places.length ? `<ul class="place-list">${a.places.map((pl) => `<li>${assistantPlace(pl)}</li>`).join("")}</ul>` : ""}
         <p class="source-note">${esc(a.engine.startsWith("reguły") ? "Odpowiedź bez modelu AI (reguły)." : `Model AI: ${a.engine}.`)} ${esc(a.disclosure)}</p>
-      </section>
-      ${sponsored ? `
-      <aside class="card sponsored" aria-label="Miejsce sponsorowane">
-        <p class="sponsored-label">Sponsorowane · ${esc(sponsored.sponsor_name)}</p>
-        <p>${esc(sponsored.tagline)}</p>
-        ${assistantPlace(sponsored, `data-sponsorship="${esc(sponsored.sponsorship_id)}"`)}
-        <details class="evidence"><summary>Dlaczego to widzę?</summary>
-          <p class="hint">Właściciel potwierdził dane o dostępności i wykupił promocję. Pokazujemy ją tylko osobom,
-          dla których to miejsce nie ma znanych przeszkód. Reklama nie zmienia ocen ani odpowiedzi asystenta.</p>
-        </details>
-      </aside>` : ""}`;
+      </section>`;
     speakText(a.answer); // przy włączonym czytaniu odpowiedź jest od razu odczytywana
   } catch (error) {
     box.innerHTML = `<p class="notice warn" role="alert">${esc(error.message)}</p>`;
@@ -683,6 +696,7 @@ function renderPlace() {
     ${pending ? `<p class="notice info loading"><span class="spinner" aria-hidden="true"></span>Dociągamy dane z OpenStreetMap - ocena uzupełni się sama.</p>` : ""}
     ${warnings.map((w) => `<p class="notice warn" role="alert">${esc(w)}</p>`).join("")}
 
+    ${a.sponsor_name ? `<p class="notice info partner-notice">Ten obiekt wykupił promocję w Dostępni.pl (${esc(a.sponsor_name)}). Ocena dostępności nie zależy od opłaty.</p>` : ""}
     ${safetyCard(a.safety)}
 
     <section class="card summary" data-summary="${esc(a.summary)}" aria-labelledby="summary-title">

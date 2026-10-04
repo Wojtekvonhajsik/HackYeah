@@ -58,7 +58,7 @@ if not os.environ.get("ADMIN_TOKEN"):
         "Brak ADMIN_TOKEN - skan zdjęć (płatne API) jest dostępny dla każdego. Ustaw go przed wdrożeniem publicznym."
     )
 
-app = FastAPI(title="Kraków bez barier - klasyfikacja barier")
+app = FastAPI(title="Dostępni.pl - API")
 app.add_middleware(
     CORSMiddleware,
     # prototyp: domyślnie wszystko; na produkcji CORS_ORIGINS=https://twoja-domena.pl
@@ -245,6 +245,7 @@ class PlaceAssessment(Assessment):
     """Ocena miejsca + analiza bezpieczeństwa (pokazywana jako pierwsza)."""
 
     safety: PlaceSafety | None = None
+    sponsor_name: str | None = None  # obiekt ma aktywną promocję - pokazujemy to jawnie; ocena od tego nie zależy
 
     @computed_field
     @property
@@ -277,7 +278,12 @@ def place_assessment(place_id: str, req: ProfileRequest, wait: bool = False) -> 
     result.warnings.extend(state.notes)  # informacja dla użytkownika, ale nie obniża oceny
     result.pending_sources = ["OpenStreetMap"] if state.pending else []
     safety = assess_safety(_city_safety(), observations, needs)
-    return PlaceAssessment.model_validate({**result.model_dump(exclude={"text"}), "safety": safety})
+    sponsorship = repo.active_sponsorship(place_id, req.today or date.today())
+    return PlaceAssessment.model_validate({
+        **result.model_dump(exclude={"text"}),
+        "safety": safety,
+        "sponsor_name": sponsorship.sponsor_name if sponsorship else None,
+    })
 
 
 # ---------- pobieranie danych z OSM w tle ----------

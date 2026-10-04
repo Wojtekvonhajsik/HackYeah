@@ -1,7 +1,7 @@
 [project]
 name = "bezbarier"
 version = "0.1.0"
-description = "Kraków bez barier - klasyfikacja barier wg potrzeb użytkownika"
+description = "Dostępni.pl - klasyfikacja barier wg potrzeb użytkownika"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.6",
