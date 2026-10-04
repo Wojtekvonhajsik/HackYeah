@@ -35,6 +35,17 @@ docker run -d -p 8000:8000 --env-file .env -v bezbarier-data:/app/storage krakow
 - `-v bezbarier-data:/app/storage` - wolumen z bazą SQLite (głosy, poprawki, wyniki skanów).
 - Obraz nie zależy od dostawcy chmury - działa na każdym hostingu kontenerów albo zwykłym VPS.
 
+### Własna domena na VPS (HTTPS)
+
+`backend/docker-compose.yml` uruchamia aplikację za serwerem Caddy, który sam pobiera i odnawia certyfikat HTTPS.
+
+1. Rekordy DNS domeny: `A @` i `A www` → adres IP serwera.
+2. Na serwerze: `curl -fsSL https://get.docker.com | sh`, `git clone` repozytorium, `cd HackYeah/backend`.
+3. `backend/.env` na podstawie `.env.example`, z `DOMAIN=twoja-domena.pl` i `ADMIN_TOKEN`.
+4. `docker compose up -d --build`.
+
+Aktualizacja: `git pull && docker compose up -d --build` (baza zostaje na wolumenie `data`).
+
 ## Hosting i koszty
 
 | Element | Opcja na start | Koszt |
