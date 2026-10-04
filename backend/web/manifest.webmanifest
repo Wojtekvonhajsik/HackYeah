@@ -1,6 +1,6 @@
 {
-  "name": "Kraków bez barier",
-  "short_name": "Bez barier",
+  "name": "Dostępni.pl",
+  "short_name": "Dostępni.pl",
   "description": "Bariery i udogodnienia w Krakowie dopasowane do Twoich potrzeb, ze źródłem i aktualnością danych.",
   "lang": "pl",
   "start_url": "/app/",
@@ -9,6 +9,17 @@
   "background_color": "#f4f6f8",
   "theme_color": "#0b5cad",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
   ]
 }

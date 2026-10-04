@@ -62,7 +62,8 @@ class SuggestedPlace(BaseModel):
     summary_text: str
     summary_confidence_pct: int | None
     highlights: list[str]
-    sponsored: bool = False
+    sponsored: bool = False   # wyświetlone wyżej za opłatą (osobne pole)
+    partner: bool = False     # obiekt ma aktywną promocję (także gdy polecony na podstawie danych)
     sponsor_name: str | None = None
     tagline: str | None = None
     sponsorship_id: str | None = None
@@ -78,7 +79,8 @@ class AssistantAnswer(BaseModel):
 
 DISCLOSURE = (
     "Odpowiedź powstaje wyłącznie z danych aplikacji (OpenStreetMap, zgłoszenia, właściciele). "
-    "Miejsca sponsorowane są oznaczone i nie wpływają na oceny ani na odpowiedź asystenta."
+    "Miejsce sponsorowane jest oznaczone i wyświetlane wyżej za opłatą - nie zmienia ocen ani kolejności poleceń. "
+    "Twoje pytanie nie jest u nas zapisywane."
 )
 
 
@@ -111,7 +113,7 @@ def pick_sponsored(candidates: list[Candidate], categories: list[str], question:
 
 
 def suggested(candidate: Candidate, sponsored: bool = False) -> SuggestedPlace:
-    s = candidate.sponsorship if sponsored else None
+    s = candidate.sponsorship
     return SuggestedPlace(
         place_id=candidate.place_id,
         name=candidate.name,
@@ -120,9 +122,11 @@ def suggested(candidate: Candidate, sponsored: bool = False) -> SuggestedPlace:
         summary_confidence_pct=candidate.summary_confidence_pct,
         highlights=candidate.highlights,
         sponsored=sponsored,
+        # partner = obiekt ma wykupioną promocję; w poleceniach z danych oznaczamy to dla przejrzystości
+        partner=s is not None,
         sponsor_name=s.sponsor_name if s else None,
-        tagline=s.tagline if s else None,
-        sponsorship_id=s.id if s else None,
+        tagline=s.tagline if s and sponsored else None,
+        sponsorship_id=s.id if s and sponsored else None,
     )
 
 
@@ -142,7 +146,7 @@ def rule_answer(question: str, relevant: list[Candidate]) -> tuple[str, list[str
 
 
 SYSTEM_PROMPT = """\
-Jesteś asystentem aplikacji „Kraków bez barier”. Pomagasz osobom z różnymi potrzebami (np. poruszanie się bez
+Jesteś asystentem aplikacji „Dostępni.pl”. Pomagasz osobom z różnymi potrzebami (np. poruszanie się bez
 stopni, z wózkiem dziecięcym, bez wzroku) wybrać miejsce w Krakowie.
 
 Zasady:

@@ -1,1 +1,1 @@
-"""Kraków bez barier - backend."""
+"""Dostępni.pl - backend."""

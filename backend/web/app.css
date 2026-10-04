@@ -1,4 +1,4 @@
-/* Kraków bez barier - mobile-first, WCAG 2.2 AA: kontrast >= 4.5:1, cele dotyku >= 44 px, widoczny fokus */
+/* Dostępni.pl - mobile-first, WCAG 2.2 AA: kontrast >= 4.5:1, cele dotyku >= 44 px, widoczny fokus */
 
 :root {
   --bg: #f4f6f8;
@@ -271,6 +271,16 @@ details.around { margin-top: 20px; }
   display: inline-block; margin: 0 0 6px; padding: 2px 8px; border-radius: 6px;
   font-size: 0.8rem; font-weight: 700; color: var(--difficult); background: var(--difficult-bg);
 }
+
+.answer-title { font-size: 1.05rem; margin-bottom: 2px; }
+.partner-note { display: block; margin-top: 4px; color: var(--difficult); font-weight: 600; }
+.partner-notice { font-size: 0.92rem; }
+
+/* ---------- strony prawne ---------- */
+.legal h2 { font-size: 1.1rem; margin: 20px 0 6px; }
+.legal p, .legal li { font-size: 0.97rem; }
+.legal ul { padding-left: 20px; }
+.privacy-promise { border-left: 6px solid var(--ok); }
 
 /* ---------- formularze zgłoszeń ---------- */
 .form-grid { display: grid; gap: 6px; }

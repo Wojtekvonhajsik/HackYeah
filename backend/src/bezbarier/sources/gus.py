@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 BDL_URL = "https://bdl.stat.gov.pl/api/v1"
 KRAKOW_UNIT_ID = "011212161011"
-USER_AGENT = "KrakowBezBarier/0.1 (HackYeah prototype)"
+USER_AGENT = "Dostepni.pl/0.1 (HackYeah prototype)"
 LICENSE = "CC BY 4.0"
 ATTRIBUTION = "Główny Urząd Statystyczny, Bank Danych Lokalnych"
 CACHE_TTL_S = 12 * 3600

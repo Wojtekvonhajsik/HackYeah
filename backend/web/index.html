@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Kraków bez barier</title>
+  <title>Dostępni.pl</title>
   <meta name="description" content="Sprawdź, czy miejsce w Krakowie odpowiada Twoim potrzebom: bariery, udogodnienia, źródła i aktualność danych.">
   <meta name="theme-color" content="#0b5cad" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f1720" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="icon" href="favicon-64.png" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="app.css">
 </head>
@@ -17,9 +17,9 @@
   <a class="skip-link" href="#main">Przejdź do treści</a>
 
   <header class="topbar">
-    <a class="brand" href="#/" aria-label="Kraków bez barier - strona główna">
-      <img src="icon.svg" alt="" width="28" height="28">
-      <span>Kraków bez barier</span>
+    <a class="brand" href="#/" aria-label="Dostępni.pl - strona główna">
+      <img src="icon-192.png" alt="" width="34" height="34">
+      <span>Dostępni.pl</span>
     </a>
     <div class="topbar-actions">
       <button id="voice-toggle" class="voice-toggle" type="button" aria-pressed="true">
@@ -95,6 +95,98 @@
       </details>
     </section>
 
+    <!-- ============ POLITYKA PRYWATNOŚCI ============ -->
+    <section id="view-privacy" class="view legal" hidden aria-labelledby="privacy-title">
+      <a class="back" href="#/">← Wróć</a>
+      <h1 id="privacy-title">Polityka prywatności</h1>
+      <p class="muted">Obowiązuje od 4 października 2026 r. (wersja prototypu HackYeah 2026)</p>
+
+      <div class="card privacy-promise">
+        <p><strong>Nie przechowujemy Twoich danych osobowych.</strong> Nie zakładasz konta, nie pytamy o niepełnosprawność,
+        a Twój profil potrzeb i historia przeglądanych miejsc zostają tylko na Twoim urządzeniu. Pytań do asystenta nie zapisujemy.</p>
+      </div>
+
+      <h2>1. Kto odpowiada za dane</h2>
+      <p>Administratorem jest zespół Dostępni.pl (projekt HackYeah 2026). Kontakt: <strong>[adres e-mail do uzupełnienia]</strong>.</p>
+
+      <h2>2. Co zostaje tylko na Twoim urządzeniu</h2>
+      <ul>
+        <li>wybrany profil potrzeb i progi (np. maksymalny próg),</li>
+        <li>ostatnio sprawdzane miejsca, Twoje głosy („zgadza się / nie zgadza się”), ustawienie czytania na głos,</li>
+        <li>losowy identyfikator urządzenia - nie jest powiązany z Tobą ani z żadnym kontem.</li>
+      </ul>
+      <p>To pamięć przeglądarki (localStorage), nie pliki cookies. Usuniesz ją, czyszcząc dane strony w przeglądarce.</p>
+
+      <h2>3. Co trafia na nasz serwer</h2>
+      <ul>
+        <li><strong>Profil potrzeb</strong> - wysyłany przy każdej ocenie, tylko do obliczenia wyniku; nie zapisujemy go.</li>
+        <li><strong>Głosy i zgłoszenia o miejscach</strong> (np. „szerokość drzwi 90 cm”) - zapisujemy anonimowo: treść,
+          datę i losowy identyfikator urządzenia (żeby jeden głos liczył się raz). Nie wpisuj w zgłoszeniach danych osobowych.</li>
+        <li><strong>Adres IP</strong> - tylko w pamięci serwera, przez godzinę, do ochrony przed nadużyciami (limit zapytań). Nie zapisujemy go.</li>
+        <li><strong>Pytania do asystenta</strong> - przetwarzane w chwili odpowiedzi i nie zapisywane.</li>
+        <li><strong>Dane właścicieli obiektów</strong> - nazwa podana przy wydaniu kodu i dane o obiekcie; kod przechowujemy tylko jako skrót (hash).</li>
+        <li><strong>Statystyki reklam</strong> - wyłącznie łączna liczba wyświetleń i kliknięć, bez informacji, kto kliknął.</li>
+      </ul>
+
+      <h2>4. Zewnętrzni dostawcy</h2>
+      <ul>
+        <li><strong>OpenStreetMap</strong> (mapa, wyszukiwarka) - przeglądarka pobiera kafelki mapy z serwerów OpenStreetMap, które widzą Twój adres IP; wpisana nazwa miejsca jest przekazywana do wyszukiwarki OpenStreetMap (Nominatim) przez nasz serwer.</li>
+        <li><strong>Google Gemini</strong> - treść pytania do asystenta (bez danych o Tobie) i zdjęcia ulic do analizy; z wyłączonym przechowywaniem po stronie Google.</li>
+        <li><strong>Rozpoznawanie mowy</strong> - przy pytaniu głosowym przeglądarka (np. Chrome) może przesłać nagranie do swojego dostawcy (np. Google). Czytanie na głos działa lokalnie.</li>
+        <li><strong>Mapillary, GUS</strong> - nasz serwer pobiera zdjęcia ulic i statystyki; nie przekazujemy im danych o Tobie.</li>
+        <li><strong>Hosting / tunel</strong> (np. Cloudflare) i biblioteka mapy (cdnjs) - techniczne przekazanie ruchu, w tym adresu IP.</li>
+      </ul>
+
+      <h2>5. Twoje prawa</h2>
+      <p>Masz prawo do informacji, sprostowania, usunięcia danych i sprzeciwu (RODO), a także do skargi do Prezesa UODO.
+      Ponieważ nie łączymy zgłoszeń z Twoją osobą, nie jesteśmy w stanie wskazać, które zgłoszenia są Twoje - jeśli chcesz
+      usunąć konkretne zgłoszenie, napisz do nas, wskazując miejsce i treść.</p>
+    </section>
+
+    <!-- ============ REGULAMIN ============ -->
+    <section id="view-terms" class="view legal" hidden aria-labelledby="terms-title">
+      <a class="back" href="#/">← Wróć</a>
+      <h1 id="terms-title">Regulamin</h1>
+      <p class="muted">Obowiązuje od 4 października 2026 r. (wersja prototypu HackYeah 2026)</p>
+
+      <h2>1. Czym jest Dostępni.pl</h2>
+      <p>Bezpłatny serwis informujący o barierach i udogodnieniach w miejscach w Krakowie, dopasowany do potrzeb użytkownika.
+      Korzystanie nie wymaga konta. Serwis jest prototypem i może działać z przerwami.</p>
+
+      <h2>2. Informacje o dostępności</h2>
+      <ul>
+        <li>Informacje pochodzą z otwartych źródeł (OpenStreetMap, GUS), automatycznej analizy zdjęć (AI), od użytkowników i właścicieli obiektów.
+          Przy każdej podajemy źródło, datę i status.</li>
+        <li><strong>Ocena nie jest gwarancją dostępności.</strong> Dane mogą być niepełne lub nieaktualne, a wyniki AI są zawsze oznaczone jako niepotwierdzone.
+          Przed wizytą w razie wątpliwości skontaktuj się z obiektem.</li>
+        <li>Brak informacji o przeszkodzie nie oznacza, że jej nie ma.</li>
+      </ul>
+
+      <h2>3. Zgłoszenia i głosy użytkowników</h2>
+      <ul>
+        <li>Zgłaszaj tylko informacje zgodne z prawdą, bez danych osobowych i treści naruszających prawo.</li>
+        <li>Dodając zgłoszenie, udzielasz nieodpłatnej licencji na jego publikację i udostępnianie innym (na zasadach zgodnych z licencją ODbL / CC BY 4.0).</li>
+        <li>Możemy usuwać zgłoszenia nieprawdziwe lub naruszające regulamin. Działa limit liczby głosów, pytań i zgłoszeń.</li>
+      </ul>
+
+      <h2>4. Właściciele obiektów</h2>
+      <p>Kod właściciela uprawnia do podawania danych o własnym obiekcie. Właściciel odpowiada za ich prawdziwość; dane mogą
+      zostać zakwestionowane przez użytkowników i wtedy oznaczamy je jako sprzeczne.</p>
+
+      <h2>5. Asystent AI i treści sponsorowane</h2>
+      <ul>
+        <li>Asystent korzysta wyłącznie z danych serwisu; odpowiedzi AI mogą zawierać błędy.</li>
+        <li>Promocję może wykupić tylko obiekt z danymi o dostępności potwierdzonymi przez właściciela.</li>
+        <li>Miejsce sponsorowane jest zawsze oznaczone jako „Sponsorowane - wyświetlane wyżej za opłatą”. Pokazujemy je tylko osobom,
+          dla których nie ma znanych przeszkód. <strong>Opłata nie wpływa na oceny dostępności ani na kolejność poleceń</strong>; obiekty z promocją
+          są oznaczone jako „Partner” także w zwykłych wynikach i na swojej karcie.</li>
+      </ul>
+
+      <h2>6. Odpowiedzialność i zmiany</h2>
+      <p>Nie odpowiadamy za decyzje podjęte wyłącznie na podstawie informacji z serwisu ani za treści pochodzące od użytkowników i z otwartych źródeł,
+      w granicach dopuszczalnych przez prawo. O zmianach regulaminu informujemy w serwisie. Reklamacje i pytania: <strong>[adres e-mail do uzupełnienia]</strong>.</p>
+    </section>
+
     <!-- ============ ASYSTENT ============ -->
     <section id="view-assistant" class="view" hidden aria-labelledby="assistant-title">
       <a class="back" href="#/">← Wróć do wyszukiwania</a>
@@ -152,7 +244,9 @@
   </main>
 
   <footer class="footer">
-    <p>Mapa i dane: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a> (ODbL) · Zdjęcia: Mapillary (CC-BY-SA 4.0) · Prototyp HackYeah 2026</p>
+    <p><strong>Nie przechowujemy Twoich danych osobowych</strong> - profil zostaje na Twoim urządzeniu.</p>
+    <p><a href="#/prywatnosc">Polityka prywatności</a> · <a href="#/regulamin">Regulamin</a></p>
+    <p>Mapa i dane: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a> (ODbL) · Zdjęcia: Mapillary (CC-BY-SA 4.0) · Statystyki: GUS (CC BY 4.0) · Dostępni.pl - prototyp HackYeah 2026</p>
   </footer>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>

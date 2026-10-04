@@ -55,6 +55,7 @@ Body: `{"preset": "step_free_strict"}`. Odpowiedź wraca od razu. Jeśli dane z 
 | `missing[]` | czego nie wiemy - pokaż wyraźnie |
 | `warnings[]` | np. niedostępne źródło danych - pokaż jako komunikat |
 | `pending_sources[]` | źródła wciąż pobierane w tle - odpytuj ponownie |
+| `sponsor_name` | obiekt ma aktywną promocję - pokaż „Ten obiekt wykupił promocję. Ocena nie zależy od opłaty.” |
 | `safety` | **analiza bezpieczeństwa - pokaż jako pierwszą**: `level` (`elevated` / `typical` / `lower` / `unknown`), `headline`, `facts[]`, `tips[]` (zależne od profilu), `crossings` (przejścia w pobliżu: z sygnalizacją / dźwiękową), `city` (wskaźniki GUS vs Polska), `scope_note` |
 
 Informacja pochodzi z analizy zdjęcia przez AI, gdy `evidence[].source.type == "ai_detection"` - oznacz ją wyraźnie (np. „AI”).
@@ -178,7 +179,8 @@ Body: `{"question": "Gdzie zjem bez schodów?", "preset": "step_free_strict"}` (
 |---|---|
 | `answer` | krótka odpowiedź po polsku - przeczytaj na głos przy włączonym czytaniu |
 | `places[]` | polecone miejsca (`place_id`, `name`, `summary`, `summary_text`, `summary_confidence_pct`) - link do karty miejsca |
-| `sponsored` | `null` albo **jedno** miejsce sponsorowane (`sponsor_name`, `tagline`, `sponsorship_id`) - pokaż osobno, z etykietą „Sponsorowane” |
+| `sponsored` | `null` albo **jedno** miejsce sponsorowane (`sponsor_name`, `tagline`, `sponsorship_id`) - pokaż **nad** odpowiedzią z etykietą „Sponsorowane · wyświetlane wyżej za opłatą” |
+| `places[].partner` | `true` = obiekt ma wykupioną promocję, choć polecony na podstawie danych - oznacz „Partner (płatna promocja)” |
 | `engine` | model AI (np. `gemini-3.5-flash-lite`) albo `reguły` (bez klucza / gdy model nie odpowie) |
 | `disclosure` | tekst o źródłach i reklamach - pokaż pod odpowiedzią |
 
